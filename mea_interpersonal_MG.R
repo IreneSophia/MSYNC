@@ -50,8 +50,8 @@ df.mea = list.files(path = dt.path[1], pattern = "*_MG_SC_p*", full.names = T) %
     dyad  = gsub(".*mea/(.+)_MG_SC.*", "\\1", fln),
     phase = as.numeric(gsub(".*SC_p(.+)$", "\\1", gsub(".txt", "", fln)))
   ) %>% ungroup() %>% select(-fln) %>%
-  # exclude participants with "no" in name
-  filter(!is.na(phase)) %>%
+  # filter out the first second of data
+  filter(frame > fps) %>%
   # exclude the frames where there is light flicker aka "paranormal activity"
   mutate(
     L = if_else(flicker1 > 0 | flicker2 > 0, NA, L),
