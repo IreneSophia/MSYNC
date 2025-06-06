@@ -14,67 +14,37 @@ dt.path = c("/media/emba/emba-2/MSYNC/data/MSYNC_MG_ET_FACE-MAPPER",
 # Read in data ------------------------------------------------------------
 
 # read in the sections as a dataframe
-df.sec = read_csv(file.path(dt.path[1], "sections.csv")) %>%
-  select(`section id`, 
-         `section start time [ns]`, `section end time [ns]`) %>%
-  pivot_longer(cols = where(is.numeric), names_to = "trigger")
-
-##### [!ADAPT]: here are only the recording start and end, where phases?
+df.sec = read_csv(file.path(dt.path[2], "MSYNC_MG_events.csv")) %>%
+  pivot_wider(names_from = c(phase, type), values_from = `timestamp [ns]`)
 
 # read in the data, merge with sections and remove everything outside
-df = read_csv(file.path(dt.path[1], "fixations_on_face.csv"))
-
-# merge and find start and end point
-df.edge = merge(
-  df %>%
-    select(`section id`, 
-           `start timestamp [ns]`) %>%
-    pivot_longer(cols = where(is.numeric)) %>%
-    merge(., df.sec, all = T) %>%
-    fill(trigger, .direction = "down") %>%
-    # focus on all the data within the section
-    filter(trigger == "section start time [ns]") %>%
-    drop_na() %>% group_by(`section id`) %>% 
-    mutate(
-      row = row_number()
-    ) %>% filter(row == min(row)) %>%
-    rename("start" = "value") %>%
-    select(`section id`, start),
-  df %>%
-    select(`section id`, 
-           `end timestamp [ns]`) %>%
-    pivot_longer(cols = where(is.numeric)) %>%
-    merge(., df.sec, all = T) %>%
-    fill(trigger, .direction = "down") %>%
-    # focus on all the data within the section
-    filter(trigger == "section start time [ns]") %>%
-    drop_na() %>% group_by(`section id`) %>% 
-    mutate(
-      row = row_number()
-    ) %>% filter(row == max(row)) %>%
-    rename("end" = "value") %>%
-    select(`section id`, end)
-  )
-
-# merge the starting and end points with the data
-df = merge(df, df.edge) %>%
-  # now we finally filter out the fixations outside the section
-  filter(
-    `start timestamp [ns]` >= start & `end timestamp [ns]` <= end
+df = merge(read_csv(file.path(dt.path[1], "fixations_on_face.csv")),
+           df.sec) %>%
+  # now we figure out to which phase which fixation belonged
+  mutate(
+    phase = case_when(
+      `start timestamp [ns]` >= `1_clap` & `end timestamp [ns]` <= `1_end` ~ "p1",
+      `start timestamp [ns]` >= `2_clap` & `end timestamp [ns]` <= `2_end` ~ "p2",
+      `start timestamp [ns]` >= `3_clap` & `end timestamp [ns]` <= `3_end` ~ "p3"
+    )
   ) %>%
+  # filter out everything not happening during one of the phases
+  filter(!is.na(phase)) %>%
   # now we compute the duration of the fixations in ms
   mutate(
     dur.ms = (`end timestamp [ns]` - `start timestamp [ns]`) / 1000000
   )
 
-# now we can aggregate the durations and compute dwell times
+# Looking at the face of the other one ------------------------------------
+
+# now we can aggregate the durations and compute dwell times for the individual
 df.agg = df %>%
-  group_by(`section id`) %>%
+  group_by(subID, phase) %>%
   mutate(
     total.dur.ms = sum(dur.ms),
     ROI = if_else(`fixation on face`, 'face', 'other')
   ) %>%
-  group_by(`section id`, ROI, total.dur.ms) %>%
+  group_by(subID, phase, ROI, total.dur.ms) %>%
   summarise(
     dur.ms = sum(dur.ms)
   ) %>%
@@ -83,10 +53,72 @@ df.agg = df %>%
   )
 
 # save data frame
-write_csv(df.agg, file.path(dt.path[2], "MSYNC_ET_CT.csv"))
+write_csv(df.agg, file.path(dt.path[2], "MSYNC_ET_MG_indi.csv"))
+
+# Shared face contact -----------------------------------------------------
+
+# when were two people looking at each other at the same time
+df.face = df %>%
+  filter(`fixation on face`) %>%
+  mutate(
+    start.ms = round(`start timestamp [ns]`/1000000),
+    end.ms   = round(`end timestamp [ns]`/1000000),
+    dyad     = substr(subID, 1, 8),
+    position = substr(subID, nchar(subID), nchar(subID))
+  )
+
+# initialise dataframe
+df.dyad = df.face %>%
+  select(dyad) %>% 
+  distinct() %>%
+  mutate(
+    p1 = NA, 
+    p2 = NA, 
+    p3 = NA,
+    Comment = ""
+  )
+
+# loop through dyad
+for (d in df.dyad$dyad) {
+  # initialise list of vectors
+  t = list()
+  # get the positions of the associated interaction partners
+  pos = unique(df.face %>% filter(dyad == d) %>% select(position))$position
+  if (length(pos) != 2) {
+    df.dyad[df.dyad$dyad == d,'Comment'] = "Not two interaction partners"
+    next
+  }
+  # loop through phases
+  for (ph in unique(df.face %>% filter(dyad == d) %>% select(phase))$phase) {
+    # loop through the positions
+    for (po in pos) {
+      # focus on this one person
+      df.sel = df.face %>% filter(position == po & dyad == d & phase == ph)
+      if (nrow(df.sel) == 0) {
+        df.dyad[df.dyad$dyad == d,'Comment'] = paste0(
+          df.dyad[df.dyad$dyad == d,'Comment'], 
+          sprintf("%s: No relevant fixatios for %s; ", ph, po))
+        next
+      }
+      # initialise vector
+      x = c()
+      # loop through fixations
+      for (i in 1:nrow(df.sel)) {
+        x = c(x, df.sel$start.ms[i]:df.sel$end.ms[i])
+      }
+      # add this info to the list
+      t[[po]] = x
+    }
+    # calculate overlap
+    shared.ms = length(intersect(t$L, t$R))
+    df.dyad[df.dyad$dyad == d, ph] = shared.ms
+  }
+}
+
+write_csv(df.dyad, file.path(dt.path[2], "MSYNC_ET_MG_dyad.csv"))
 
 # Save workspace ----------------------------------------------------------
 
 # save workspace
-save.image(file = file.path(dt.path[1], "ET_CT.Rdata"))
+save.image(file = file.path(dt.path[1], "ET_MG.Rdata"))
 
