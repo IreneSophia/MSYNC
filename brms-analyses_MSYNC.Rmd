@@ -1,0 +1,146 @@
+---
+title: "S1: behavioural analysis with brms - hypothesis-guided and explorative"
+author: "I. S. Plank"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+  
+```{r settings, include=FALSE}
+
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.align = 'center', fig.width = 9)
+ls.packages = c("knitr",# kable
+    "ggplot2",          # plots
+    "brms",             # Bayesian lmms
+    "designr",          # simLMM
+    "bridgesampling",   # bridge_sampler
+    "tidyverse",        # tibble stuff
+    "ggpubr",           # ggarrange
+    "ggrain",           # geom_rain
+    "bayesplot",        # plots for posterior predictive checks
+    "SBC",              # plots for checking computational faithfulness
+    "rstatix",          # anova
+    "BayesFactor", 
+    "bayestestR"        # equivalence_test
+)
+
+lapply(ls.packages, library, character.only=TRUE)
+
+# set cores
+options(mc.cores = parallel::detectCores())
+
+# set options for SBC
+use_cmdstanr = getOption("SBC.vignettes_cmdstanr", TRUE) # Set to false to use rstan instead
+options(brms.backend = "cmdstanr")
+
+# using parallel processing
+library(future)
+plan(multisession)
+
+# Setup caching of results
+cache_dir = "./_brms_SBC_cache"
+if(!dir.exists(cache_dir)) {
+  dir.create(cache_dir)
+}
+
+# graph settings 
+c_light = "#a9afb2"; c_light_highlight = "#8ea5b2"; c_mid = "#6b98b2" 
+c_mid_highlight = "#3585b2"; c_dark = "#0072b2"; c_dark_highlight = "#0058b2" 
+c_green = "#009E73"
+sz = 1
+
+# custom colour palette
+custom.col = c(c_dark_highlight, "#CC79A7", "#009E73", "#D55E00")
+
+```
+
+<style type="text/css">
+  .main-container {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+</style>
+  
+# S1.1 Introduction
+  
+This R Markdown script analyses data from the MSYNC project. The data was preprocessed before being read into this script. 
+
+## Some general settings
+
+```{r set}
+
+# number of simulations
+nsim = 500
+
+# set number of iterations and warmup for models
+iter = 3000
+warm = 1000
+
+# set the seed
+set.seed(2468)
+
+```
+
+## Package versions
+
+The following packages are used in this RMarkdown file: 
+  
+```{r lib_versions, echo=F}
+
+print(R.Version()$version.string)
+
+for (package in ls.packages) {
+  print(sprintf("%s version %s", package, packageVersion(package)))
+}
+
+```
+
+## General info
+
+We planned to determine the group-level effect subjects following Barr (2013). For each model, experiment specific priors were set based on previous literature or the task (see comments in the code).
+
+We perform prior predictive checks as proposed in Schad, Betancourt and Vasishth (2020) using the SBC package. To do so, we create `r nsim` simulated datasets where parameters are simulated from the priors. These parameters are used to create one fake dataset. Both the true underlying parameters and the simulated discrimination values are saved. 
+
+Then, we create graphs showing the prior predictive distribution of the simulated discrimination threshold to check whether our priors fit our general expectations about the data. Next, we perform checks of computational faithfulness and model sensitivity as proposed by Schad, Betancourt and Vasishth (2020) and implemented in the SBC package. We create models for each of the simulated datasets. Last, we calculate performance metrics for each of these models, focusing on the population-level parameters. Most simulation-based calibrations were  performed on the original models with three diagnostic groups. Since priors, data points per comparison and model formula did not change, we assume that the SBC holds for the model with four diagnostic groups. 
+
+## Preparation and group comparisons
+
+First, we load the data and combine it with demographic information including the diagnostic status of the subjects. Then, all predictors are set to sum contrasts. 
+
+```{r prep_data}
+
+# check if the data file exists, if yes load it:
+if (!file.exists("MSYNC_data.RData")) {
+  
+  # set the data path
+  dt.path  = "/media/emba/emba-2/MSYNC/data"
+
+  # get demo info for subjects
+  df.sub = read_csv(file.path(dt.path, "df_centraXX_final.csv"), 
+                    show_col_types = F)
+  
+  # anonymise everything [!ADD]
+  
+  # load excluded participants (low accuracy)
+  #exc = scan(file.path(dt.path, 'FER-exc.txt'), what="character", sep=NULL)
+  
+  #df.exc = df.sub %>% 
+  #  filter(subID %in% exc) %>% 
+  #  count()
+}
+
+p1 = ggplot(df.sub, aes(x = IRI_final)) + 
+  geom_density(fill = c_mid_highlight, alpha = 0.66) +
+  labs(title = "Distribution of individual Interpersonal Reactivity", y = "", x = "") +
+  theme_bw()
+
+p2 = ggplot(df.sub, aes(x = RAADS_final)) + 
+  geom_density(fill = c_mid_highlight, alpha = 0.66) +
+  labs(title = "Distribution of individual RADS-R", y = "", x = "") +
+  theme_bw()
+
+# [!ADD] distributions of the dyadic similarity measures
+
+ggarrange(p1, p2, ncol = 2)
+
+```
