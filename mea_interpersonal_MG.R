@@ -122,37 +122,49 @@ dev.off()
 # convert from mea list to list
 ls.ccf = getCCF(mea.ccf, type = "fullMatrix")
 
+# create a dataframe in which to put the information
+df.ccf = data.frame()
+
 # peak picking
 for (i in 1:length(ls.ccf)){
-  # append maximum of positive lag (L movement happening before L movement)
-  ls.ccf[[i]]$R_peak = apply(ls.ccf[[i]][,(floor(ncol(ls.ccf[[i]])/2)+2):ncol(ls.ccf[[i]])], 1, max, na.rm = T)
-  ls.ccf[[i]]$R_mean = apply(ls.ccf[[i]][,(floor(ncol(ls.ccf[[i]])/2)+2):ncol(ls.ccf[[i]])], 1, mean, na.rm = T)
-  # append maximum of negative lag (R movement happening before R movement)
-  ls.ccf[[i]]$L_peak = apply(ls.ccf[[i]][,1:floor(ncol(ls.ccf[[i]])/2)], 1, max, na.rm = T) 
-  ls.ccf[[i]]$L_mean = apply(ls.ccf[[i]][,1:floor(ncol(ls.ccf[[i]])/2)], 1, mean, na.rm = T) 
-  # append maximum of both lags
-  ls.ccf[[i]]$B_peak = apply(ls.ccf[[i]], 1, max, na.rm = T) 
-  ls.ccf[[i]]$B_mean = apply(ls.ccf[[i]], 1, mean, na.rm = T) 
-  # keep only relevant columns
-  ls.ccf[[i]] = ls.ccf[[i]][,c("L_peak", "L_mean","R_peak", "R_mean", "B_peak", "B_mean")]
-  # transpose all df in list
-  ls.ccf[[i]] = as.data.frame(t(ls.ccf[[i]]))
-  # set rownames as first column
-  data.table::setDT(ls.ccf[[i]], keep.rownames = TRUE)
-  colnames(ls.ccf[[i]])[1] = "feature"
+  idx.lag0 = which(colnames(ls.ccf[[i]]) == "lag0")
+  # extract information on positive lag (L movement happening before L movement)
+  R_peak = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, max, na.rm = T)
+  R_mean = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, mean, na.rm = T)
+  R_plag = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, which.max) + idx.lag0
+  # extract information on negative lag (R movement happening before R movement)
+  L_peak = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, max, na.rm = T) 
+  L_mean = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, mean, na.rm = T) 
+  L_plag = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, which.max) 
+  # extract info of both lags
+  B_mean = apply(ls.ccf[[i]], 1, mean, na.rm = T) 
+  B_peak = apply(ls.ccf[[i]], 1, max, na.rm = T) 
+  B_plag = apply(ls.ccf[[i]], 1, which.max) 
+  # extract lag0 synchrony
+  B_zero = ls.ccf[[i]]$lag0
+  # add the information to the dataframe
+  df.ccf = rbind(df.ccf, 
+                 data.frame(R_peak, R_mean, R_plag, 
+                            L_peak, L_mean, L_plag, 
+                            B_peak, B_mean, B_plag, B_zero) %>% 
+                   mutate(ID = names(ls.ccf)[i])
+                 )
 }
 
 # create one overall dataframe in the format ID-peaks
-df.ccf = bind_rows(ls.ccf, .id = "ID") %>% 
-  separate(ID, c("ROI", "dyad", "phase")) %>%
-  separate(feature, c("position", "aggregation")) %>%
-  pivot_longer(cols = starts_with("w"), names_to = "window", values_to = "MEA.sync") %>%
+df.ccf = df.ccf %>% 
+  pivot_longer(cols = where(is.numeric), names_to = "feature", 
+               values_to = "MEA.sync") %>%
+  separate("feature", sep = "_", into = c("position", "measure")) %>%
+  separate("ID", sep = "_", into = c("ROI", "dyad", "phase")) %>%
   mutate(
     MEA.sync = if_else(MEA.sync != -Inf, MEA.sync, NA),
     dyad = paste0("MSYNC_", dyad),
     phase = as.numeric(phase)
-  ) %>% 
-  group_by(dyad, position, phase, aggregation) %>%
+  ) 
+
+df.ccf.agg = df.ccf %>% 
+  group_by(dyad, position, phase, measure) %>%
   summarise(
     MEA.sync = mean(MEA.sync, na.rm = T)
   )
@@ -168,7 +180,7 @@ df.mov = df.mea %>%
   pivot_longer(cols = c(L, R, B), names_to = "position", values_to = "MEA.mov")
 
 # merge together
-df = merge(df.ccf, df.mov)
+df = merge(df.ccf.agg, df.mov)
 
 # save data frame
 write_csv(df, file.path(dt.path[2], "MSYNC_mea_MG.csv"))
