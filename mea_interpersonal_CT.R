@@ -15,6 +15,9 @@ library(rMEA)
 dt.path = c("/media/emba/emba-2/MSYNC/data/mea", 
             "/media/emba/emba-2/MSYNC/data")
 
+dt.path = c("/Users/vilya/Documents/MSYNC/data/mea", 
+            "/Users/vilya/Documents/MSYNC/data")
+
 # set frame rate
 fps = 120
 
