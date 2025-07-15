@@ -204,18 +204,18 @@ for (i in 1:length(ls.ccf)){
   # drop rows with NAs
   all_lags = ls.ccf[[i]] %>% drop_na()
   idx.lag0 = which(colnames(all_lags) == "lag0")
-  # extract information on positive lag (L movement happening before L movement)
-  R_peak = apply(all_lags, 1, max, na.rm = T)
-  R_mean = apply(all_lags, 1, mean, na.rm = T)
-  R_plag = apply(all_lags, 1, which.max) + idx.lag0
-  # extract information on negative lag (R movement happening before R movement)
-  L_peak = apply(all_lags, 1, max, na.rm = T) 
-  L_mean = apply(all_lags, 1, mean, na.rm = T) 
-  L_plag = apply(all_lags, 1, which.max) 
+  # extract information on positive lag
+  R_peak = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, max, na.rm = T)
+  R_mean = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, mean, na.rm = T)
+  R_plag = abs(idx.lag0 - apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, which.max))/fps
+  # extract information on negative lag
+  L_peak = apply(all_lags[,1:(idx.lag0-1)], 1, max, na.rm = T) 
+  L_mean = apply(all_lags[,1:(idx.lag0-1)], 1, mean, na.rm = T) 
+  L_plag = abs(idx.lag0 - apply(all_lags[,1:(idx.lag0-1)], 1, which.max))/fps
   # extract info of both lags
   B_mean = apply(all_lags, 1, mean, na.rm = T) 
   B_peak = apply(all_lags, 1, max, na.rm = T) 
-  B_plag = apply(all_lags, 1, which.max) 
+  B_plag = abs(idx.lag0 - apply(all_lags, 1, which.max)) /fps
   # extract lag0 synchrony
   B_zero = all_lags$lag0
   # add the information to the dataframe
@@ -228,7 +228,7 @@ for (i in 1:length(ls.ccf)){
 }
 
 
-# create one overall dataframe in the format ID-peaks
+# create one overall dataframe in the long format
 df.ccf = df.ccf %>% 
   pivot_longer(cols = where(is.numeric), names_to = "feature", 
                values_to = "OF.sync") %>%
@@ -251,7 +251,7 @@ saveRDS(df.ccf.agg, file.path(dt.path[2], "MSYNC_AU_sync_CT.rds"))
 
 # Facial expressiveness ---------------------------------------------------
 
-# full expressiveness: mean of all AUs and frames  [!CHECK]
+# full expressiveness: mean of all AUs and frames
 df.exp = df %>%
   select(ID, dyad, speaker, frame, matches("AU.*r")) %>%
   pivot_longer(names_to = "input", values_to = "exp", cols = matches("AU.*r")) %>%
@@ -266,7 +266,7 @@ saveRDS(df.exp, file.path(dt.path[2], "MSYNC_AU_intensity_CT.rds"))
 # Save workspace ----------------------------------------------------------
 
 # clean workspace
-rm(list = setdiff(ls(), c("df", "ls.fakeAU", "ls.AUs", "dt.path")))
+rm(list = setdiff(ls(), c("df", "ls.fakeAU", "ls.AUs", "dt.path", "df.ccf")))
 
 # save workspace
 save.image(file = file.path(dt.path[1], "OpenFace_CT.RData"))
