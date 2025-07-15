@@ -1,8 +1,7 @@
 # (C) Irene Sophia Plank
 # 
 # This script takes the output of Motion Energy analysis and calculates INTER-
-# personal synchrony. It is an adaptation of a script written by Jana Koehler, 
-# published in https://github.com/jckoe/MLASS-study. 
+# personal synchrony. 
 
 # clean workspace
 rm(list = ls())
@@ -11,12 +10,12 @@ rm(list = ls())
 library(tidyverse)
 library(rMEA)
 
-# set path to MEA files
-dt.path = c("/media/emba/emba-2/MSYNC/data/preprocessedMEA", 
-            "/media/emba/emba-2/MSYNC/data")
-
-dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedMEA", 
+# set path to OpenPose files
+dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedOP", 
             "/Users/vilya/Documents/MSYNC/data")
+
+# get a list of the referenced files
+files = list.files(path = dt.path[1], pattern = "*_ref.rds")
 
 # set frame rate
 fps = 120
@@ -47,62 +46,39 @@ fakeMEA = function(s1, s2, sampRate, ROI, id) {
 
 # Read in data ------------------------------------------------------------
 
-# read in the data as a dataframe
-df.mea = list.files(path = dt.path[1], pattern = "*CT_SC*", full.names = T) %>%
-  setNames(nm = .) %>%
-  map_df(~read_delim(., show_col_types = F, delim = " ", 
-                     col_names = c("L_head", "R_head", "L_body", "R_body", "flicker")), 
-         .id = "fln") %>%
-  group_by(fln) %>%
-  mutate(
-    frame = row_number(),
-    dyad  = gsub(".*MEA/(.+)_CT_SC.*", "\\1", fln)
-  ) %>% ungroup() %>% select(-fln) %>%
-  # exclude the frames where there is light flicker aka "paranormal activity"
-  mutate(
-    L_head = if_else(flicker > 0, NA, L_head),
-    L_body = if_else(flicker > 0, NA, L_body),
-    R_head = if_else(flicker > 0, NA, R_head),
-    R_body = if_else(flicker > 0, NA, R_body),
-    L      = L_head + L_body,
-    R      = R_head + R_body
-  ) %>%
-  # only keep seconds 10-610
-  filter(frame > fps*skip & frame <= fps*(tiwo+skip)) %>%
-  group_by(dyad) %>%
-  arrange(dyad, frame) %>%
-  mutate(
-    # use linear interpolation to replace the missing values
-    L.ip = approx(frame, L, frame)$y,
-    R.ip = approx(frame, R, frame)$y,
-    L.head = approx(frame, L_head, frame)$y,
-    R.head = approx(frame, R_head, frame)$y,
-    L.body = approx(frame, L_body, frame)$y,
-    R.body = approx(frame, R_body, frame)$y
-    )
+df.ref = readRDS(file.path(dt.path[1], "MSYNC_OP_ref.rds"))
 
-# check how much data is still lost despite interpolation
-df.miss = df.mea %>% 
-  group_by(dyad) %>%
-  summarise(
-    missing = round(mean(is.na(R.ip) | is.na(L.ip)),3)
-  )
-
-# initialise mea list
-mea = c()
-
-# loop through the dyads
-for (d in unique(df.mea$dyad)) {
-  # extract relevant data
-  df.sel = df.mea %>%
+for (d in unique(df.ref$dyad)) {
+  
+  # select the relevant data
+  df.sel = df.ref %>%
     filter(dyad == d)
-  id  =  gsub("MSYNC_", "", d)
-  ROI = 'all'
-  # create fakeMEA object for this dyad
-  mea.sel = fakeMEA(df.sel$L.ip, df.sel$R.ip, fps, ROI, id)
-  names(mea.sel) = paste0(ROI, "_", id, "_01")
-  # add it to the mea list
-  mea = c(mea, mea.sel)
+  
+  # initialise "mea" list
+  mea = c()
+
+  # extract relevant info
+  id  =  gsub("MSYNC_(.+)", "\\1", d)
+  
+  # loop through the keypoints
+  for (k in unique(df.sel$key)) {
+    # extract the relevant datapoints: mirrored for left/right
+    if (grepl("_R", k)) {
+      L = df.sel[df.sel$key == k,]$L
+      R = df.sel[df.sel$key == gsub("R", "L", k),]$R
+    } else if (grepl("_L", k)) {
+      L = df.sel[df.sel$key == k,]$L
+      R = df.sel[df.sel$key == gsub("L", "R", k),]$R
+    } else {
+      L = df.sel[df.sel$key == k,]$L
+      R = df.sel[df.sel$key == k,]$R
+    }
+    # create fakeMEA object for this dyad and keypoint
+    mea.sel = fakeMEA(L, R, fps, k, id)
+    names(mea.sel) = paste0(k, "_", id, "_01")
+    # add it to the mea list
+    mea = c(mea, mea.sel)
+  }
 }
 
 # Preprocessing -----------------------------------------------------------
@@ -164,47 +140,52 @@ for (i in 1:length(ls.ccf)){
 # create one overall dataframe in the format ID-peaks
 df.ccf = df.ccf %>% 
   pivot_longer(cols = where(is.numeric), names_to = "feature", 
-               values_to = "MEA.sync") %>%
-  separate("feature", sep = "_", into = c("position", "measure")) %>%
-  separate("ID", sep = "_", into = c("ROI", "dyad", "phase")) %>%
+               values_to = "IPSmov") %>%
+  separate("feature", sep = "_", into = c("side", "measure")) %>%
+  separate("ID", sep = "_", into = c("key", "dyad", "phase")) %>%
   mutate(
-    MEA.sync = if_else(MEA.sync != -Inf, MEA.sync, NA),
+    IPSmov = if_else(IPSmov != -Inf, IPSmov, NA),
     dyad = paste0("MSYNC_", dyad),
     phase = as.numeric(phase)
   ) 
 
+# aggregate the synchrony values
 df.ccf.agg = df.ccf %>% 
-  group_by(dyad, position, phase, measure) %>%
+  group_by(dyad, key, side, phase, measure) %>%
   summarise(
-    MEA.sync = mean(MEA.sync, na.rm = T)
+    IPSmov = mean(IPSmov, na.rm = T)
   )
 
-# aggregate total movement and merge with ccf
-df.mov = df.mea %>%
-  group_by(dyad) %>%
-  summarise(
-    L_total.mv = sum(L.ip > 0, na.rm = T)/ n(),
-    R_total.mv = sum(R.ip > 0, na.rm = T) / n(),
-    B_total.mv = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n(),
-    L_head.mv  = sum(L.head > 0, na.rm = T)/ n(),
-    R_head.mv  = sum(R.head > 0, na.rm = T)/ n(),
-    B_head.mv  = sum(L.head > 0 | R.head > 0, na.rm = T)/ n(),
-    L_body.mv  = sum(L.body > 0, na.rm = T)/ n(),
-    R_body.mv  = sum(R.body > 0, na.rm = T)/ n(),
-    B_body.mv  = sum(L.body > 0 | R.body > 0, na.rm = T)/ n()
-  ) %>%
-  pivot_longer(cols = where(is.numeric)) %>%
-  separate(name, into = c("position", "AOI"), sep = "_") %>%
-  pivot_wider(names_from = AOI, values_from = value)
+df.mov = readRDS(file.path(dt.path[1], "MSYNC_OP.rds")) %>%
+  select(dyad, side, key, frame, dist)
 
-# merge together
-df = merge(df.ccf.agg, df.mov)
+df.mov.agg = rbind(
+  df.mov %>% 
+    mutate(
+      key = case_when(
+        grepl("L", key) & side == "R" ~ gsub("L", "R", key),
+        grepl("R", key) & side == "R" ~ gsub("R", "L", key),
+        T ~ key
+      ),
+      side = "B"
+    ),
+  df.mov) %>%
+  filter(key != "ref") %>%
+  group_by(side, key) %>%
+  summarise(
+    QNTmov = sum(dist, na.rm = T)
+  )
+
+# summarise the movement quantity
+df = merge(
+  df.mov.agg,
+  df.ccf.agg)
 
 # save data frame
-write_csv(df, file.path(dt.path[2], "MSYNC_mea_CT.csv"))
+write_csv(df, file.path(dt.path[2], "MSYNC_OP_CT.csv"))
 
 # Save workspace ----------------------------------------------------------
 
 # save workspace
-save.image(file = file.path(dt.path[1], "MEA_CT.Rdata"))
+save.image(file = file.path(dt.path[1], "MSYNC_OP_CT.Rdata"))
 

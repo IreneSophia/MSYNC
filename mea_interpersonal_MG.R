@@ -12,7 +12,7 @@ library(tidyverse)
 library(rMEA)
 
 # set path to MEA files
-dt.path = c("/media/emba/emba-2/MSYNC/data/mea", 
+dt.path = c("/media/emba/emba-2/MSYNC/data/preprocessedMEA", 
             "/media/emba/emba-2/MSYNC/data")
 
 # set frame rate
