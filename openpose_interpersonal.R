@@ -14,14 +14,11 @@ library(rMEA)
 dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedOP", 
             "/Users/vilya/Documents/MSYNC/data")
 
-# get a list of the referenced files
-files = list.files(path = dt.path[1], pattern = "*_ref.rds")
+# set the task 
+task = "CT"
 
 # set frame rate
 fps = 120
-
-# length of time window of interest (seconds)
-tiwo = 600
 
 # seconds to ignore at the start
 skip = 10
@@ -46,16 +43,16 @@ fakeMEA = function(s1, s2, sampRate, ROI, id) {
 
 # Read in data ------------------------------------------------------------
 
-df.ref = readRDS(file.path(dt.path[1], "MSYNC_OP_ref.rds"))
+df.ref = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s_ref.rds", task)))
+
+# initialise "mea" list
+mea = c()
 
 for (d in unique(df.ref$dyad)) {
   
   # select the relevant data
   df.sel = df.ref %>%
     filter(dyad == d)
-  
-  # initialise "mea" list
-  mea = c()
 
   # extract relevant info
   id  =  gsub("MSYNC_(.+)", "\\1", d)
@@ -97,7 +94,7 @@ mea.ccf = MEAccf(mea.scaled,
                  ABS = T)
 
 # visual inspection
-pdf(file = paste(dt.path[1], "heatmaps_CT.pdf", sep = "/"))  
+pdf(file = file.path(dt.path[1], sprintf("heatmaps_%s.pdf", task)))  
 for (i in 1:length(mea.ccf)){
   MEAheatmap(mea.ccf[[i]], legendSteps = 20, rescale = T) 
 }
@@ -114,18 +111,18 @@ for (i in 1:length(ls.ccf)){
   # drop rows with NAs
   all_lags = ls.ccf[[i]] %>% drop_na()
   idx.lag0 = which(colnames(all_lags) == "lag0")
-  # extract information on positive lag (L movement happening before L movement)
-  R_peak = apply(all_lags, 1, max, na.rm = T)
-  R_mean = apply(all_lags, 1, mean, na.rm = T)
-  R_plag = apply(all_lags, 1, which.max) + idx.lag0
-  # extract information on negative lag (R movement happening before R movement)
-  L_peak = apply(all_lags, 1, max, na.rm = T) 
-  L_mean = apply(all_lags, 1, mean, na.rm = T) 
-  L_plag = apply(all_lags, 1, which.max) 
+  # extract information on positive lag
+  R_peak = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, max, na.rm = T)
+  R_mean = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, mean, na.rm = T)
+  R_plag = abs(idx.lag0 - apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, which.max))/fps
+  # extract information on negative lag
+  L_peak = apply(all_lags[,1:(idx.lag0-1)], 1, max, na.rm = T) 
+  L_mean = apply(all_lags[,1:(idx.lag0-1)], 1, mean, na.rm = T) 
+  L_plag = abs(idx.lag0 - apply(all_lags[,1:(idx.lag0-1)], 1, which.max))/fps
   # extract info of both lags
   B_mean = apply(all_lags, 1, mean, na.rm = T) 
   B_peak = apply(all_lags, 1, max, na.rm = T) 
-  B_plag = apply(all_lags, 1, which.max) 
+  B_plag = abs(idx.lag0 - apply(all_lags, 1, which.max)) /fps
   # extract lag0 synchrony
   B_zero = all_lags$lag0
   # add the information to the dataframe
@@ -137,7 +134,7 @@ for (i in 1:length(ls.ccf)){
   )
 }
 
-# create one overall dataframe in the format ID-peaks
+# create one overall dataframe
 df.ccf = df.ccf %>% 
   pivot_longer(cols = where(is.numeric), names_to = "feature", 
                values_to = "IPSmov") %>%
@@ -156,9 +153,11 @@ df.ccf.agg = df.ccf %>%
     IPSmov = mean(IPSmov, na.rm = T)
   )
 
-df.mov = readRDS(file.path(dt.path[1], "MSYNC_OP.rds")) %>%
+# load information on movement in general
+df.mov = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s.rds", task))) %>%
   select(dyad, side, key, frame, dist)
 
+# summarise the movement quantity
 df.mov.agg = rbind(
   df.mov %>% 
     mutate(
@@ -171,21 +170,24 @@ df.mov.agg = rbind(
     ),
   df.mov) %>%
   filter(key != "ref") %>%
-  group_by(side, key) %>%
+  group_by(dyad, side, key) %>%
   summarise(
     QNTmov = sum(dist, na.rm = T)
   )
 
-# summarise the movement quantity
+# merge the dataframes
 df = merge(
   df.mov.agg,
   df.ccf.agg)
 
 # save data frame
-write_csv(df, file.path(dt.path[2], "MSYNC_OP_CT.csv"))
+write_csv(df, file.path(dt.path[2], sprintf("MSYNC_OP_%s.csv", task)))
 
 # Save workspace ----------------------------------------------------------
 
+# clean workspace
+rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task")))
+
 # save workspace
-save.image(file = file.path(dt.path[1], "MSYNC_OP_CT.Rdata"))
+save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s.Rdata", task)))
 

@@ -52,7 +52,7 @@ df.mea = list.files(path = dt.path[1], pattern = "*_MG_SC_p*", full.names = T) %
   group_by(fln) %>%
   mutate(
     frame = row_number(),
-    dyad  = gsub(".*mea/(.+)_MG_SC.*", "\\1", fln),
+    dyad  = gsub(".*MEA/(.+)_MG_SC.*", "\\1", fln),
     phase = as.numeric(gsub(".*SC_p(.+)$", "\\1", gsub(".txt", "", fln))),
     flicker = flicker1 + flicker2
   ) %>% ungroup() %>% select(-fln) %>%
@@ -179,13 +179,7 @@ df.mov = df.mea %>%
   summarise(
     L_total.mv = sum(L.ip > 0, na.rm = T)/ n(),
     R_total.mv = sum(R.ip > 0, na.rm = T) / n(),
-    B_total.mv = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n(),
-    L_head.mv  = sum(L.head > 0, na.rm = T)/ n(),
-    R_head.mv  = sum(R.head > 0, na.rm = T)/ n(),
-    B_head.mv  = sum(L.head > 0 | R.head > 0, na.rm = T)/ n(),
-    L_body.mv  = sum(L.body > 0, na.rm = T)/ n(),
-    R_body.mv  = sum(R.body > 0, na.rm = T)/ n(),
-    B_body.mv  = sum(L.body > 0 | R.body > 0, na.rm = T)/ n()
+    B_total.mv = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n()
   ) %>%
   pivot_longer(cols = where(is.numeric)) %>%
   separate(name, into = c("position", "AOI"), sep = "_") %>%

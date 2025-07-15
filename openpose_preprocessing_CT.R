@@ -24,8 +24,10 @@ for (f in files){
   
   # load the dyad's data
   tmp = read_csv(file.path(dt.path, f)) %>%
+    rename_with(~ "frame", .cols = where(is.character)) %>%
     pivot_longer(cols = where(is.numeric)) %>%
     mutate(
+      frame = as.numeric(frame),
       dyad  = gsub("(.+)_CT.*", "\\1", f),
       side  = substr(name, 1, 1), 
       key   = as.numeric(substr(name, 2, nchar(name)-1)),
@@ -41,7 +43,7 @@ for (f in files){
     )
   
   if (sum(is.na(tmp$x))/nrow(tmp) >= 1/3) {
-    warning(sprintf("Dyad has %.1f%% missing data.", 
+    warning(sprintf("Dyad %s has %.1f%% missing data.", f,
                     100*sum(is.na(tmp$x))/nrow(tmp)))
   }
   
@@ -109,7 +111,16 @@ for (f in files){
   
 }
 
+# check how many dyads with too few valid data points
+df.ref %>% group_by(dyad, key, axis) %>%
+  summarise(
+    valid = min(sum(!is.na(L))/72121, sum(!is.na(R))/72121)
+  ) %>% filter(valid <= 2/3) %>% arrange(valid)
+
+# need to exclude MSYNC_15 
+df     = df %>% filter(dyad != "MSYNC_15")
+df.ref = df.ref %>% filter(dyad != "MSYNC_15")
 
 # save the data
-saveRDS(df.ref, file = file.path(dt.path, "MSYNC_OP_ref.rds"))
-saveRDS(df, file = file.path(dt.path, "MSYNC_OP.rds"))
+saveRDS(df.ref, file = file.path(dt.path, "MSYNC_OP_CT_ref.rds"))
+saveRDS(df, file = file.path(dt.path, "MSYNC_OP_CT.rds"))

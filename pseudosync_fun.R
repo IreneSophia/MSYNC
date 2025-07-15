@@ -68,7 +68,7 @@ pseudosync = function(method, mea, sampRate, lagSec, winSec, incSec,
       
       # shuffling first person
       if (method == "data") {
-        mea[[i]][["MEA"]][,1] = sample(mea[["MEA"]][,1])
+        mea[[i]][["MEA"]][,1] = sample(mea[[i]][["MEA"]][,1])
       } else if (method == "seg") {
         mea[[i]][["MEA"]][,1] = unlist(sample(mea_1))
         mea[[i]][["MEA"]][,2] = unlist(mea_2)
@@ -88,7 +88,7 @@ pseudosync = function(method, mea, sampRate, lagSec, winSec, incSec,
       
       # shuffling second person
       if (method == "data") {
-        mea[[i]][["MEA"]][,2] = sample(mea[["MEA"]][,2])
+        mea[[i]][["MEA"]][,2] = sample(mea[[i]][["MEA"]][,2])
       } else if (method == "seg") {
         mea[[i]][["MEA"]][,1] = unlist(mea_1)
         mea[[i]][["MEA"]][,2] = unlist(sample(mea_2))

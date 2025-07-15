@@ -8,8 +8,13 @@ rm(list = ls())
 library(tidyverse)
 
 # set path to MEA files
-dt.path = c("/media/emba/emba-2/MSYNC/data/MSYNC_MG_ET_FACE-MAPPER", 
-            "/media/emba/emba-2/MSYNC/data")
+if (Sys.getenv("LOGNAME") == "vilya") {
+  dt.path = c("/Users/vilya/Documents/MSYNC/data/MSYNC_MG_ET_FACE-MAPPER", 
+              "/Users/vilya/Documents/MSYNC/data")
+} else {
+  dt.path = c("/media/emba/emba-2/MSYNC/data/MSYNC_MG_ET_FACE-MAPPER", 
+              "/media/emba/emba-2/MSYNC/data")
+}
 
 # Read in data ------------------------------------------------------------
 
