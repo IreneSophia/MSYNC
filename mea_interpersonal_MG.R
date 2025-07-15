@@ -12,8 +12,13 @@ library(tidyverse)
 library(rMEA)
 
 # set path to MEA files
-dt.path = c("/media/emba/emba-2/MSYNC/data/preprocessedMEA", 
-            "/media/emba/emba-2/MSYNC/data")
+if (Sys.getenv("LOGNAME") == "vilya") {
+  dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedMEA", 
+              "/Users/vilya/Documents/MSYNC/data")
+} else {
+  dt.path = c("/media/emba/emba-2/MSYNC/data/preprocessedMEA", 
+              "/media/emba/emba-2/MSYNC/data")
+}
 
 # set frame rate
 fps = 120
@@ -48,26 +53,23 @@ df.mea = list.files(path = dt.path[1], pattern = "*_MG_SC_p*", full.names = T) %
   mutate(
     frame = row_number(),
     dyad  = gsub(".*mea/(.+)_MG_SC.*", "\\1", fln),
-    phase = as.numeric(gsub(".*SC_p(.+)$", "\\1", gsub(".txt", "", fln)))
+    phase = as.numeric(gsub(".*SC_p(.+)$", "\\1", gsub(".txt", "", fln))),
+    flicker = flicker1 + flicker2
   ) %>% ungroup() %>% select(-fln) %>%
   # filter out the first second of data
   filter(frame > fps) %>%
   # exclude the frames where there is light flicker aka "paranormal activity"
   mutate(
-    L = if_else(flicker1 > 0 | flicker2 > 0, NA, L),
-    R = if_else(flicker1 > 0 | flicker2 > 0, NA, R)
+    L      = if_else(flicker > 0, NA, L),
+    R      = if_else(flicker > 0, NA, R)
   ) %>%
   group_by(dyad, phase) %>%
   arrange(dyad, phase, frame) %>%
   mutate(
-    # check how much each dyad lost to the flicker
-    total_flick = mean(flicker1 > 0 | flicker2 > 0),
     # use linear interpolation to replace the missing values
     L.ip = approx(frame, L, frame)$y,
-    R.ip = approx(frame, R, frame)$y,
-    # check whether one of both people moved
-    move = if_else(L.ip > 0 | R.ip > 0, 1, 0)
-    )
+    R.ip = approx(frame, R, frame)$y
+  )
 
 # check how much data is still lost despite interpolation
 df.miss = df.mea %>% 
@@ -127,28 +129,30 @@ df.ccf = data.frame()
 
 # peak picking
 for (i in 1:length(ls.ccf)){
-  idx.lag0 = which(colnames(ls.ccf[[i]]) == "lag0")
-  # extract information on positive lag (L movement happening before L movement)
-  R_peak = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, max, na.rm = T)
-  R_mean = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, mean, na.rm = T)
-  R_plag = apply(ls.ccf[[i]][,(idx.lag0+1):ncol(ls.ccf[[i]])], 1, which.max) + idx.lag0
-  # extract information on negative lag (R movement happening before R movement)
-  L_peak = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, max, na.rm = T) 
-  L_mean = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, mean, na.rm = T) 
-  L_plag = apply(ls.ccf[[i]][,1:(idx.lag0-1)], 1, which.max) 
+  # drop rows with NAs
+  all_lags = ls.ccf[[i]] %>% drop_na()
+  idx.lag0 = which(colnames(all_lags) == "lag0")
+  # extract information on positive lag
+  R_peak = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, max, na.rm = T)
+  R_mean = apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, mean, na.rm = T)
+  R_plag = abs(idx.lag0 - apply(all_lags[,(idx.lag0+1):ncol(all_lags)], 1, which.max))/fps
+  # extract information on negative lag
+  L_peak = apply(all_lags[,1:(idx.lag0-1)], 1, max, na.rm = T) 
+  L_mean = apply(all_lags[,1:(idx.lag0-1)], 1, mean, na.rm = T) 
+  L_plag = abs(idx.lag0 - apply(all_lags[,1:(idx.lag0-1)], 1, which.max))/fps
   # extract info of both lags
-  B_mean = apply(ls.ccf[[i]], 1, mean, na.rm = T) 
-  B_peak = apply(ls.ccf[[i]], 1, max, na.rm = T) 
-  B_plag = apply(ls.ccf[[i]], 1, which.max) 
+  B_mean = apply(all_lags, 1, mean, na.rm = T) 
+  B_peak = apply(all_lags, 1, max, na.rm = T) 
+  B_plag = abs(idx.lag0 - apply(all_lags, 1, which.max)) /fps
   # extract lag0 synchrony
-  B_zero = ls.ccf[[i]]$lag0
+  B_zero = all_lags$lag0
   # add the information to the dataframe
   df.ccf = rbind(df.ccf, 
                  data.frame(R_peak, R_mean, R_plag, 
                             L_peak, L_mean, L_plag, 
                             B_peak, B_mean, B_plag, B_zero) %>% 
                    mutate(ID = names(ls.ccf)[i])
-                 )
+  )
 }
 
 # create one overall dataframe in the format ID-peaks
@@ -171,13 +175,21 @@ df.ccf.agg = df.ccf %>%
 
 # aggregate total movement and merge with ccf
 df.mov = df.mea %>%
-  group_by(dyad, phase) %>%
+  group_by(dyad) %>%
   summarise(
-    L = sum(L.ip > 0, na.rm = T)/ n(),
-    R = sum(R.ip > 0, na.rm = T) / n(),
-    B = sum(move, na.rm = T) / n()
+    L_total.mv = sum(L.ip > 0, na.rm = T)/ n(),
+    R_total.mv = sum(R.ip > 0, na.rm = T) / n(),
+    B_total.mv = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n(),
+    L_head.mv  = sum(L.head > 0, na.rm = T)/ n(),
+    R_head.mv  = sum(R.head > 0, na.rm = T)/ n(),
+    B_head.mv  = sum(L.head > 0 | R.head > 0, na.rm = T)/ n(),
+    L_body.mv  = sum(L.body > 0, na.rm = T)/ n(),
+    R_body.mv  = sum(R.body > 0, na.rm = T)/ n(),
+    B_body.mv  = sum(L.body > 0 | R.body > 0, na.rm = T)/ n()
   ) %>%
-  pivot_longer(cols = c(L, R, B), names_to = "position", values_to = "MEA.mov")
+  pivot_longer(cols = where(is.numeric)) %>%
+  separate(name, into = c("position", "AOI"), sep = "_") %>%
+  pivot_wider(names_from = AOI, values_from = value)
 
 # merge together
 df = merge(df.ccf.agg, df.mov)
