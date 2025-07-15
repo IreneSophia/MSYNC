@@ -11,8 +11,8 @@
 
 library(tidyverse)
 
-dt.path = c("/media/emba/emba-2/ML_BOKI/AUD_preprocessed", 
-            "/media/emba/emba-2/ML_BOKI/ML_data")
+dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedAudio", 
+            "/Users/vilya/Documents/MSYNC/data")
 
 # Load data ---------------------------------------------------------------
 
@@ -38,10 +38,10 @@ rm(df.pint, df.pros)
 
 # split filenames
 df.indi = df.indi %>%
-  separate(col = soundname, into = c("dyad1", "dyad2", "task", "ch", "side"), remove = F) %>%
+  separate(col = soundname, into = c("dyad1", "dyad2", "task", "prep", "ch", "side"), remove = F) %>%
   mutate(
     dyad = paste0(dyad1, "_", dyad2)
-  ) %>% select(-dyad1, -dyad2, -ch)
+  ) %>% select(-dyad1, -dyad2, -ch, -prep)
 
 # calculate speech rate for dyad
 df.spr = df.indi %>% 
@@ -59,10 +59,6 @@ df.spr = df.indi %>%
 # merge speech rate with dyad data frame
 df.dyad = merge(df.dyad, df.spr)
 rm(df.spr)
-
-# get rid of excluded participants
-df.indi = df.indi %>% 
-  filter(dyad %in% df.dyad$dyad)
 
 # Individual synchronisation ----------------------------------------------
 
@@ -121,46 +117,10 @@ df.dyad = merge(df.dyad, ttg.dyad, all.x = T)
 
 rm(ttg.indi, ttg.dyad, df.turn)
 
-# Add groups and info -----------------------------------------------------
 
-df.sub = read_csv(file.path("/media/emba/emba-2/ML_BOKI/demoCentraXX", 
-                            "BOKI_centraXX.csv")) %>%
-  filter(substr(dyad, 1, 4) == "BOKI") %>%
-  select(dyad, label, ID)
-
-df.indi = df.indi %>% 
-  mutate(
-    pit_var = sd_pitch^2, 
-    int_var = sd_int^2,
-    ID = paste(df.indi$dyad, df.indi$speaker, sep = "_")
-    ) %>%
-  merge(., df.sub) %>%
-  select(-side, -speaker) %>%
-  relocate(dyad, ID, label, task)
-
-# add dyad group to dyad data frame
-df.dyad = merge(df.dyad, df.sub %>% select(dyad, label) %>% distinct()) %>%
-  relocate(dyad, label, task)
+# Save --------------------------------------------------------------------
 
 # save it all
 write_csv(df.dyad, file.path(dt.path[1], 'OUT_dyad.csv'))
 write_csv(df.indi, file.path(dt.path[1], 'OUT_indi.csv'))
 
-# create the data frame for NM
-df.NM = merge(df.indi %>%
-                select(dyad, ID, label, task,
-                       art, npause, nsyll, pho, art_sync, int_sync, pit_sync, 
-                       int_var, pit_var), 
-              df.dyad %>% 
-                select(dyad, label, task,
-                       no_turns, str, spr, int_sync_MEA, pit_sync_MEA, ttg) %>%
-                rename_if(is.numeric, ~ paste0("dyad_", .x))
-              ) %>%
-  pivot_wider(names_from = task, values_from = where(is.numeric), 
-              names_glue = "{.value}_{task}_speech") %>%
-  mutate(
-    speaker = substr(ID, nchar(ID), nchar(ID))
-  ) %>%
-  relocate(ID, dyad, label, speaker)
-
-write_csv(df.NM, file.path(dt.path[2], 'BOKI_speech_NM.csv'))

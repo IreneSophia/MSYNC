@@ -29,8 +29,8 @@ fakeMEA = function(s1, s2, sampRate, s1Name = "s1Name", s2Name = "s2Name") {
   return(mea)
 }
 
-dt.path = c("/media/emba/emba-2/ML_BOKI/AUD_preprocessed", 
-            "/media/emba/emba-2/ML_BOKI/ML_data")
+dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedAudio", 
+            "/Users/vilya/Documents/MSYNC/data")
 
 # Load data and set up output matrices ------------------------------------
 
@@ -65,12 +65,12 @@ for (i in 1:nrow(df.turn)) {
   }
   if (reload) {
     fl_L = list.files(pattern = paste(df.turn$dyad[i] ,"_",
-                                      df.turn$task[i], "_ch_L",
+                                      df.turn$task[i], "_cut_ch_L",
                                       ".*cont\\.csv$",
                                       sep = ""),
                       path = dt.path[1])
     fl_R = list.files(pattern = paste(df.turn$dyad[i] ,"_",
-                                      df.turn$task[i], "_ch_R",
+                                      df.turn$task[i], "_cut_ch_R",
                                       ".*cont\\.csv$",
                                       sep = ""),
                       path = dt.path[1])

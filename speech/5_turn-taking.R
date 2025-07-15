@@ -12,45 +12,23 @@
 
 library(tidyverse)
 
-dt.path = c("/media/emba/emba-2/ML_BOKI/AUD_preprocessed", 
-            "/media/emba/emba-2/ML_BOKI/ML_data")
+dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedAudio", 
+            "/Users/vilya/Documents/MSYNC/data")
 
-
-# Get list of included dyads ----------------------------------------------
-
-# lists all relevant IDs
-df.sub = read_csv(file.path("/media/emba/emba-2/ML_BOKI/demoCentraXX", 
-                            "BOKI_centraXX.csv")) %>%
-  filter(substr(dyad, 1, 4) == "BOKI") %>%
-  select(dyad, ID, label)
-ls.inc = unique(df.sub$dyad)
-ls.IDs = c(paste0(ls.inc, "_M_ch_L"), paste0(ls.inc, "_H_ch_L"),
-           paste0(ls.inc, "_M_ch_R"), paste0(ls.inc, "_H_ch_R"))
 
 # Import silence data -----------------------------------------------------
 
-# check if any silence files are missing
-incomplete = c()
-ls.fls = c() # list for all relevant files
-for (d in ls.IDs) {
-  file = file.path(dt.path[1], paste0(d, '_silence.csv'))
-  if (!file.exists(file)) {
-    warning(sprintf('File %s does not exist', d))
-    incomplete = c(incomplete, d)
-  } else {
-    ls.fls = c(ls.fls, file)
-  }
-}
-
-# no incomplete files
+# list of files
+ls.fls = list.files(path = dt.path[1], pattern = "*silence.csv")
 
 # load all the data into one data frame
-df  = do.call("rbind", lapply(ls.fls, read_csv, show_col_types = F))
+df  = do.call("rbind", lapply(file.path(dt.path[1], ls.fls), 
+                              read_csv, show_col_types = F))
 
 # convert to ms
 df = df %>% mutate(across(where(is.numeric), ~ .x * 1000)) %>% 
   mutate(across(where(is.numeric), round)) %>%
-  separate(col = Name, into = c("dyad1", "dyad2", "task", "ch", "side"), remove = T) %>%
+  separate(col = Name, into = c("dyad1", "dyad2", "task", "prep", "ch", "side"), remove = T) %>%
   mutate(
     dyad = paste0(dyad1, "_", dyad2)
   ) %>%
@@ -123,25 +101,16 @@ df.out = df.out %>%
   ) %>%
   arrange(dyad, task, start_turn)
 
-# check if any silence files are missing
-incomplete = c()
-ls.fls = c() # list for all relevant files
-for (d in ls.IDs) {
-  file = file.path(dt.path[1], paste0(d, '_syllable.csv'))
-  if (!file.exists(file)) {
-    warning(sprintf('File %s does not exist', d))
-    incomplete = c(incomplete, d)
-  } else {
-    ls.fls = c(ls.fls, file)
-  }
-}
+# get list of files
+ls.fls = list.files(path = dt.path[1], pattern = "*syllable.csv")
 
 # load all the data into one data frame
-df  = do.call("rbind", lapply(ls.fls, read_csv, show_col_types = F))
+df  = do.call("rbind", lapply(file.path(dt.path[1], ls.fls), 
+                              read_csv, show_col_types = F))
 
 # split filenames
 df = df %>% 
-  separate(col = Name, into = c("dyad1", "dyad2", "task", "ch", "side"), remove = T) %>%
+  separate(col = Name, into = c("dyad1", "dyad2", "task", "prep", "ch", "side"), remove = T) %>%
   mutate(
     dyad = paste(dyad1, dyad2, sep = "_"),
     time = round(Number * 1000)
