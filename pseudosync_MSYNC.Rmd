@@ -406,6 +406,78 @@ res = ttestBF(x = df.agg[!is.na(df.agg$art_sync),]$art_sync,
 res
 res@bayesFactor[["bf"]]
 
+
+p1 = df.agg %>% 
+  pivot_longer(cols = c(pit_sync, pit_psync)) %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Turn-based pitch sync", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+p2 = df.agg %>% 
+  pivot_longer(cols = c(int_sync, int_psync)) %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Turn-based int sync", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+p3 = df.agg %>% 
+  pivot_longer(cols = c(art_sync, art_psync)) %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Turn-based art sync", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+ggarrange(p1, p2, p3, ncol = 3)
+
 ```
 
 The t-tests show that there is a significant difference between the pseudosynchronisation values obtained through segment shuffling and the real synchronisation values in the case of turn-based synchronisation of intensity and articulation rate, with the real synchronisation values being higher. However, for pitch this was not credibly the case. 
@@ -458,10 +530,14 @@ if (!file.exists(file.path(dt.path, "preprocessedAudio", filename))) {
     # create fakeMEA and divide into segments
     mea_int  = fakeMEA(L_int,R_int,sr,"int_L","int_R")
     mea_pit  = fakeMEA(L_pit,R_pit,sr,"pit_L","pit_R")
-    mea_int_L = split(mea_int[["all_01_01"]][["MEA"]][["s1Name"]], floor(seq_along(mea_int[["all_01_01"]][["MEA"]][["s1Name"]])/16))
-    mea_int_R = split(mea_int[["all_01_01"]][["MEA"]][["s2Name"]], floor(seq_along(mea_int[["all_01_01"]][["MEA"]][["s2Name"]])/16))
-    mea_pit_L = split(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]], floor(seq_along(mea_pit[["all_01_01"]][["MEA"]][["s1Name"]])/16))
-    mea_pit_R = split(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]], floor(seq_along(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]])/16))
+    mea_int_L = split(mea_int[["all_01_01"]][["MEA"]][["s1Name"]],
+                      floor(seq_along(mea_int[["all_01_01"]][["MEA"]][["s1Name"]])/16))
+    mea_int_R = split(mea_int[["all_01_01"]][["MEA"]][["s2Name"]],
+                      floor(seq_along(mea_int[["all_01_01"]][["MEA"]][["s2Name"]])/16))
+    mea_pit_L = split(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]],
+                      floor(seq_along(mea_pit[["all_01_01"]][["MEA"]][["s1Name"]])/16))
+    mea_pit_R = split(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]],
+                      floor(seq_along(mea_pit[["all_01_01"]][["MEA"]][["s2Name"]])/16))
     # shuffle each side n/2 times
     for (j in 1:(n/2)) {
       
@@ -532,9 +608,183 @@ res = ttestBF(x = df.agg[!is.na(df.agg$int_sync_MEA),]$int_sync_MEA,
 res
 res@bayesFactor[["bf"]] 
 
+
+p1 = df.agg %>% 
+  pivot_longer(cols = c(pit_sync_MEA, pit_psync_MEA)) %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Cont pitch sync", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+p2 = df.agg %>% 
+  pivot_longer(cols = c(int_sync_MEA, int_psync_MEA)) %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Cont int sync", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+ggarrange(p1, p2, ncol = 3)
+
+
+
 ```
 
 The t-tests show that there is a significant difference between the pseudosynchrony values obtained through segment shuffling and the real synchrony values in the case of MEA-based CCF synchrony of intensity and pitch, with the real synchrony values being higher.
+
+# OpenFace data
+
+```{r prep_of}
+
+if (!file.exists(file.path(dt.path, "preprocessedOF", "df_psync.csv"))) {
+  
+  # create a dataframe
+  df.psync = data.frame()
+  
+  # only do the conversation task 
+  attach(file.path(dt.path, "preprocessedOF", "OpenFace_CT.Rdata"), name = 'CT')
+  for (meth in c("seg")) {
+    df.mea = pseudosync(meth, 
+                        ls.fakeAU, 
+                        sampRate = 120, 
+                        lagSec = 2, winSec = 7, incSec = 4, 
+                        n = n)
+    df.mea = df.mea %>% 
+      mutate(
+        dyad = gsub("(.+)_CT.*", "\\1", name),
+        phase = "CT", 
+        method = meth,
+        key  = gsub(".*_CT_(.+)", "\\1", name),
+        psync = as.numeric(psync)
+      ) %>%
+      merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
+              ungroup() %>% 
+              filter(position == "B" & measure == "mean") %>%
+              select(dyad, phase, key, OF.sync))
+    df.psync = rbind(df.psync, df.mea)
+  }
+  df.psync = rbind(df.psync, df.mea)
+  # detach the CT data
+  detach('CT')
+  
+  # save the pseudosynchrony values
+  write_csv(df.psync, file.path(dt.path, "preprocessedOF", "df_psync.csv"))
+  
+} else {
+  df.psync = read_csv(file.path(dt.path, "preprocessedOF", "df_psync.csv"))
+}
+
+
+```
+
+```{r comp_of}
+
+df.pagg = df.psync %>%
+  mutate(
+    type = if_else(substr(key, 1, 2) == "AU", "AU", "pose")
+  ) %>%
+  group_by(dyad, type) %>%
+  summarise(
+    psync    = mean(psync),
+    OF.sync  = mean(OF.sync)
+  ) %>%
+  pivot_longer(cols = c(psync, OF.sync)) %>%
+  mutate_if(is.character, as.factor)
+
+aov.CT.AU = anovaBF( value ~ name , 
+                  df.pagg %>% filter(type == "AU"))
+
+aov.CT.AU@bayesFactor
+interpret_bf(aov.CT.AU@bayesFactor$bf, log = T)
+
+aov.CT.PS = anovaBF( value ~ name , 
+                  df.pagg %>% filter(type == "pose"))
+
+aov.CT.PS@bayesFactor
+interpret_bf(aov.CT.PS@bayesFactor$bf, log = T)
+
+p1 = df.pagg %>% 
+  filter(type == "AU") %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Conversation task: AUs", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+p2 = df.pagg %>% 
+  filter(type == "pose") %>%
+  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
+  geom_rain(rain.side = 'f1x1',
+            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
+            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
+            point.args = list(show_guide = FALSE, alpha = a)
+            ) +
+  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
+               aes(group = name)) +
+  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
+               aes(group = name), colour = "black") +
+  scale_fill_manual(values = custom.col[c(1,3)]) +
+  scale_colour_manual(values = custom.col[c(1,3)]) +
+  labs(title = "Conversation task: pose", 
+       x = "", 
+       y = "") +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5), 
+        text = element_text(size = 12))
+
+ggarrange(p1, p2, ncol = 2)
+
+```
+
+
 
 # OpenPose data
 
@@ -581,133 +831,5 @@ if (!file.exists(file.path(dt.path, "preprocessedOP", "df_psync.csv"))) {
   df.psync = read_csv(file.path(dt.path, "preprocessedOF", "df_psync.csv"))
 }
 
-
-```
-
-
-# OpenFace data
-
-```{r prep_of, eval=F}
-
-if (!file.exists(file.path(dt.path, "preprocessedOF", "df_psync.csv"))) {
-  
-  # create a dataframe
-  df.psync = data.frame()
-  
-  # only do the conversation task 
-  attach(file.path(dt.path, "preprocessedOF", "OpenFace_CT.Rdata"), name = 'CT')
-  for (meth in c("seg", "data")) {
-    df.mea = pseudosync(meth, 
-                        ls.fakeAU, 
-                        sampRate = 120, 
-                        lagSec = 2, winSec = 7, incSec = 4, 
-                        n = n)
-    df.mea = df.mea %>% 
-      mutate(
-        dyad = gsub("(.+)_CT.*", "\\1", name),
-        phase = "CT", 
-        method = meth,
-        key  = gsub(".*_CT_(.+)", "\\1", name),
-        psync = as.numeric(psync)
-      ) %>%
-      merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
-              ungroup() %>% 
-              filter(position == "B" & measure == "mean") %>%
-              select(dyad, phase, key, OF.sync))
-    df.psync = rbind(df.psync, df.mea)
-  }
-  df.psync = rbind(df.psync, df.mea)
-  # detach the CT data
-  detach('CT')
-  
-  # save the pseudosynchrony values
-  write_csv(df.psync, file.path(dt.path, "preprocessedOF", "df_psync.csv"))
-  
-} else {
-  df.psync = read_csv(file.path(dt.path, "preprocessedOF", "df_psync.csv"))
-}
-
-
-```
-
-```{r comp_of, eval=F}
-
-df.pagg = df.psync %>%
-  mutate(
-    type = if_else(substr(key, 1, 2) == "AU", "AU", "pose")
-  ) %>%
-  group_by(dyad, type) %>%
-  summarise(
-    psync    = mean(psync),
-    OF.sync  = mean(OF.sync)
-  ) %>%
-  pivot_longer(cols = c(psync, OF.sync)) %>%
-  mutate_if(is.character, as.factor)
-
-aov.CT.AU = anovaBF( value ~ name , 
-                  df.pagg %>% filter(type == "AU"))
-
-aov.CT.AU@bayesFactor
-interpret_bf(aov.CT.AU@bayesFactor$bf, log = T)
-
-aov.CT.PS = anovaBF( value ~ name , 
-                  df.pagg %>% filter(type == "pose"))
-
-aov.CT.PS@bayesFactor
-interpret_bf(aov.CT.PS@bayesFactor$bf, log = T)
-
-p1 = df.pagg %>% 
-  filter(task == "CT") %>%
-  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
-  geom_rain(rain.side = 'f1x1',
-            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
-            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
-            point.args = list(show_guide = FALSE, alpha = a)
-            ) +
-  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
-               aes(group = name)) +
-  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
-               aes(group = name), colour = "black") +
-  scale_fill_manual(values = custom.col[c(1,3)]) +
-  scale_colour_manual(values = custom.col[c(1,3)]) +
-  labs(title = "Conversation task", 
-       x = "", 
-       y = "") +
-  theme_bw() + 
-  theme(legend.position = "none", 
-        plot.title = element_text(hjust = 0.5), 
-        text = element_text(size = 12))
-
-aov.MG = anovaBF( value ~ name, 
-                  df.pagg %>% filter(task != "CT"))
-
-aov.MG@bayesFactor
-interpret_bf(sort(aov.MG@bayesFactor$bf, decreasing = T)[1], log = T)
-
-p2 = df.pagg %>% 
-  filter(task != "CT") %>%
-  ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
-  geom_rain(rain.side = 'f1x1',
-            boxplot.args = list(color = "black", outlier.shape = NA, show_guide = FALSE, alpha = a),
-            violin.args = list(color = "black", outlier.shape = NA, alpha = a),
-            point.args = list(show_guide = FALSE, alpha = a)
-            ) +
-  stat_summary(fun = mean, geom = "line", aes(group = 1), colour = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2,
-               aes(group = name)) +
-  stat_summary(fun = mean, geom = "point", shape = 5, size = 2,
-               aes(group = name), colour = "black") +
-  scale_fill_manual(values = custom.col[c(1,3)]) +
-  scale_colour_manual(values = custom.col[c(1,3)]) +
-  labs(title = "Mirror game", 
-       x = "", 
-       y = "") +
-  theme_bw() + 
-  theme(legend.position = "none", 
-        plot.title = element_text(hjust = 0.5), 
-        text = element_text(size = 12))
-
-ggarrange(p1, p2, ncol = 2)
 
 ```
