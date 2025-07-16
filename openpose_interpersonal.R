@@ -15,7 +15,7 @@ dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedOP",
             "/Users/vilya/Documents/MSYNC/data")
 
 # set the task 
-task = "CT"
+task = "MG"
 
 # set frame rate
 fps = 120

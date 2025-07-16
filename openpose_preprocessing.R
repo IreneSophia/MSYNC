@@ -7,40 +7,69 @@ library(tidyverse)
 # clean workspace
 rm(list = ls())
 
+# set the task
+task = "MG"
+
+# set path
+if (Sys.getenv("LOGNAME") == "vilya") {
+  dt.path = "/Users/vilya/Documents/MSYNC/data/preprocessedOP"
+} else {
+  dt.path = "/media/emba/emba-2/MSYNC/data/preprocessedOP"
+}
+
 # set paths and input files
-dt.path = '/Users/vilya/Documents/MSYNC/data/preprocessedOP'
-files = list.files(path = dt.path, pattern = "*.csv")
+files = list.files(path = dt.path, pattern = sprintf(".*%s.*.csv", task))
 
 # settings for the videos and durations
 fps      = 120
 skip     = 10
-duration = 600
+duration = 600 # only applies for CT, but for MG we use all of it anyway
 
 # initialise the data frames
 df.ref = data.frame()
 df     = data.frame()
 
+# total number of files
+total = length(files)
+x = 0
+
 for (f in files){
   
+  if (task == "CT") {
+    max.key = 8
+  } else {
+    max.key = 14
+  }
+  
+  x = x + 1
+  print(sprintf("%s: %i of %i", Sys.time(), x, total))
+  
   # load the dyad's data
-  tmp = read_csv(file.path(dt.path, f)) %>%
+  tmp = read_csv(file.path(dt.path, f), show_col_types = F) %>%
     rename_with(~ "frame", .cols = where(is.character)) %>%
     pivot_longer(cols = where(is.numeric)) %>%
     mutate(
       frame = as.numeric(frame),
-      dyad  = gsub("(.+)_CT.*", "\\1", f),
+      dyad  = gsub(sprintf("(.+)_%s.*", task), "\\1", f),
       side  = substr(name, 1, 1), 
       key   = as.numeric(substr(name, 2, nchar(name)-1)),
       name  = substr(name, nchar(name), nchar(name))
     ) %>% 
     # focus on the relevant keypoints
-    filter(key <= 8) %>%
+    filter(key <= max.key) %>%
     pivot_wider(id_cols = c(dyad, side, key, frame)) %>%
     # set all frames to NA where the confidence is below 2/3
     mutate(
       x = if_else(c < 2/3, NA, x),
       y = if_else(c < 2/3, NA, y)
     )
+  
+  # add phase information if MG
+  if (task == "MG") {
+    tmp$phase = gsub(".*_SC_p(.+)_cut.*", "\\1", f)
+  } else {
+    tmp$phase = "CT"
+  }
   
   if (sum(is.na(tmp$x))/nrow(tmp) >= 1/3) {
     warning(sprintf("Dyad %s has %.1f%% missing data.", f,
@@ -61,15 +90,21 @@ for (f in files){
       frame = as.numeric(frame),
       # convert keys to relevant names
       key = case_match(key, 
-                       0 ~ "head",
-                       1 ~ "neck",
-                       2 ~ "shoulderL",
-                       3 ~ "ellbowL",
-                       4 ~ "handL", 
-                       5 ~ "shoulderR", 
-                       6 ~ "ellbowR", 
-                       7 ~ "handR", 
-                       8 ~ "ref")
+                       0  ~ "head",
+                       1  ~ "neck",
+                       2  ~ "shoulderL",
+                       3  ~ "ellbowL",
+                       4  ~ "handL", 
+                       5  ~ "shoulderR", 
+                       6  ~ "ellbowR", 
+                       7  ~ "handR", 
+                       8  ~ "ref",
+                       9  ~ "hipL",
+                       10 ~ "kneeL",
+                       11 ~ "footL",
+                       12 ~ "hipR",
+                       13 ~ "kneeR",
+                       14 ~ "footR")
     ) %>%
     filter(frame >= skip*fps & frame < (duration*fps + skip*fps)) %>%
     # add the movement quantity
@@ -91,13 +126,13 @@ for (f in files){
         x.ref = x.ma, 
         y.ref = y.ma
       ) %>%
-      select(side, frame, x.ref, y.ref), 
+      select(side, phase, frame, x.ref, y.ref), 
     tmp) %>%
     mutate(
       x = x.ma - x.ref,
       y = y.ma - y.ref
     ) %>% filter(key != "ref") %>%
-    select(dyad, side, key, frame, x, y) %>%
+    select(dyad, phase, side, key, frame, x, y) %>%
     # if on the right side, then flip it
     mutate(
       x = if_else(side == "R", x * (-1), x)
@@ -111,16 +146,25 @@ for (f in files){
   
 }
 
+# max data points
+if (task == "CT") {
+  max.dt = duration*fps
+} else {
+  max.dt = 3*60*fps
+}
+
 # check how many dyads with too few valid data points
-df.ref %>% group_by(dyad, key, axis) %>%
+df.ref %>% group_by(dyad, phase, key, axis) %>%
   summarise(
-    valid = min(sum(!is.na(L))/72121, sum(!is.na(R))/72121)
+    valid = min(sum(!is.na(L))/max.dt, sum(!is.na(R))/max.dt)
   ) %>% filter(valid <= 2/3) %>% arrange(valid)
 
-# need to exclude MSYNC_15 
-df     = df %>% filter(dyad != "MSYNC_15")
-df.ref = df.ref %>% filter(dyad != "MSYNC_15")
+# need to exclude MSYNC_15 for CT
+if (task == "CT") {
+  df     = df %>% filter(dyad != "MSYNC_15")
+  df.ref = df.ref %>% filter(dyad != "MSYNC_15")
+}  
 
 # save the data
-saveRDS(df.ref, file = file.path(dt.path, "MSYNC_OP_CT_ref.rds"))
-saveRDS(df, file = file.path(dt.path, "MSYNC_OP_CT.rds"))
+saveRDS(df.ref, file = file.path(dt.path, sprintf("MSYNC_OP_%s_ref.rds", task)))
+saveRDS(df, file = file.path(dt.path, sprintf("MSYNC_OP_%s.rds", task)))
