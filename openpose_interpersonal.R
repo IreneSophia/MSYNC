@@ -11,8 +11,13 @@ library(tidyverse)
 library(rMEA)
 
 # set path to OpenPose files
-dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedOP", 
-            "/Users/vilya/Documents/MSYNC/data")
+if (Sys.getenv("LOGNAME") == "vilya") {
+  dt.path = c("/Users/vilya/Documents/MSYNC/data/preprocessedOP", 
+              "/Users/vilya/Documents/MSYNC/data")
+} else {
+  dt.path = c("/media/emba/emba-2/MSYNC/data/preprocessedOP", 
+              "/media/emba/emba-2/MSYNC/data")
+}
 
 # set the task 
 task = "MG"
@@ -86,12 +91,21 @@ mea.scaled = MEAscale(mea)
 # Time series synchronisation ---------------------------------------------
 
 # compute windowed lagged cross correlation
-mea.ccf = MEAccf(mea.scaled,
-                 lagSec = 5,
-                 winSec = 30, 
-                 incSec = 15, 
-                 r2Z = T,
-                 ABS = T)
+if (task == "CT") {
+  mea.ccf = MEAccf(mea.scaled,
+                   lagSec = 5,
+                   winSec = 30, 
+                   incSec = 15, 
+                   r2Z = T,
+                   ABS = T)
+} else {
+  mea.ccf = MEAccf(mea.scaled,
+                   lagSec = 2,
+                   winSec = 30, 
+                   incSec = 1, 
+                   r2Z = T,
+                   ABS = T)
+}
 
 # visual inspection
 pdf(file = file.path(dt.path[1], sprintf("heatmaps_%s.pdf", task)))  

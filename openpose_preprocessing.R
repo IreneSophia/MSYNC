@@ -163,7 +163,7 @@ df.ref %>% group_by(dyad, phase, key, axis) %>%
 if (task == "CT") {
   df     = df %>% filter(dyad != "MSYNC_15")
   df.ref = df.ref %>% filter(dyad != "MSYNC_15")
-}  
+}
 
 # save the data
 saveRDS(df.ref, file = file.path(dt.path, sprintf("MSYNC_OP_%s_ref.rds", task)))
