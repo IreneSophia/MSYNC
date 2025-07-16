@@ -138,39 +138,43 @@ for (i in 1:length(ls.ccf)){
 df.ccf = df.ccf %>% 
   pivot_longer(cols = where(is.numeric), names_to = "feature", 
                values_to = "IPSmov") %>%
-  separate("feature", sep = "_", into = c("side", "measure")) %>%
+  separate("feature", sep = "_", into = c("position", "measure")) %>%
   separate("ID", sep = "_", into = c("key", "dyad", "phase")) %>%
   mutate(
     IPSmov = if_else(IPSmov != -Inf, IPSmov, NA),
-    dyad = paste0("MSYNC_", dyad),
-    phase = as.numeric(phase)
+    dyad = paste0("MSYNC_", dyad)
   ) 
+
+if (task == "CT") {
+  df.ccf$phase = "CT"
+}
 
 # aggregate the synchrony values
 df.ccf.agg = df.ccf %>% 
-  group_by(dyad, key, side, phase, measure) %>%
+  group_by(dyad, key, position, phase, measure) %>%
   summarise(
     IPSmov = mean(IPSmov, na.rm = T)
   )
 
 # load information on movement in general
 df.mov = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s.rds", task))) %>%
-  select(dyad, side, key, frame, dist)
+  rename("position" = "side") %>%
+  select(dyad, position, key, frame, dist)
 
 # summarise the movement quantity
 df.mov.agg = rbind(
   df.mov %>% 
     mutate(
       key = case_when(
-        grepl("L", key) & side == "R" ~ gsub("L", "R", key),
-        grepl("R", key) & side == "R" ~ gsub("R", "L", key),
+        grepl("L", key) & position == "R" ~ gsub("L", "R", key),
+        grepl("R", key) & position == "R" ~ gsub("R", "L", key),
         T ~ key
       ),
-      side = "B"
+      position = "B"
     ),
   df.mov) %>%
   filter(key != "ref") %>%
-  group_by(dyad, side, key) %>%
+  group_by(dyad, position, key) %>%
   summarise(
     QNTmov = sum(dist, na.rm = T)
   )

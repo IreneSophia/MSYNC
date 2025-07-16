@@ -2,8 +2,12 @@
 title: "MSYNC: pseudosynchrony"
 author: "I. S. Plank"
 date: "`r Sys.Date()`"
-output: pdf_document
-geometry: margin=0.4in
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+fontsize: 10pt
+geometry: margin=0.5in
 ---
   
 ```{r settings, include=FALSE}
@@ -57,7 +61,11 @@ fakeMEA = function(s1, s2, sampRate, s1Name = "s1Name", s2Name = "s2Name") {
 }
 
 # set the path to the data folders
-dt.path  = "/Users/vilya/Documents/MSYNC/data"
+if (Sys.getenv("LOGNAME") == "vilya") {
+  dt.path  = "/Users/vilya/Documents/MSYNC/data"
+} else {
+  dt.path = "/media/emba/emba-2/MSYNC/data"
+}
 
 ```
 
@@ -92,61 +100,72 @@ n = 100
 
 # MEA data
 
-```{r prep_mea, eval=F}
+```{r prep_mea}
 
 if (!file.exists(file.path(dt.path, "preprocessedMEA", "df_psync.csv"))) {
   
   # create a dataframe
   df.psync = data.frame()
   
-  # start with the conversation task 
-  attach(file.path(dt.path, "preprocessedMEA", "MEA_CT.Rdata"), name = 'CT')
-  for (meth in c("seg", "data")) {
-    df.mea = pseudosync(meth, mea.scaled, 
-                            sampRate = 120, 
-                            lagSec = 5,
-                            winSec = 30, 
-                            incSec = 15, 
-                            n = n)
-    df.mea = df.mea %>% 
-      mutate(
-        dyad = sprintf("MSYNC_%s", gsub("all_(.+)_0.*", "\\1", name)),
-        task = "CT",
-        method = meth
-      ) %>%
-      merge(., df.ccf.agg %>% ungroup() %>% 
-              filter(position == "B" & measure == "mean") %>%
-              select(dyad, phase, MEA.sync))
-    df.psync = rbind(df.psync, df.mea)
-    write_csv(df.psync, file.path(dt.path, "preprocessedMEA", "df_psync-CT.csv"))
+  # check if CT has been run before
+  if (!file.exists(file.path(dt.path, "preprocessedMEA", "df_psync-CT.csv"))) {
+    # start with the conversation task 
+    attach(file.path(dt.path, "preprocessedMEA", "MEA_CT.Rdata"), name = 'CT')
+    for (meth in c("seg", "data")) {
+      df.mea = pseudosync(meth, mea.scaled, 
+                              sampRate = 120, 
+                              lagSec = 5,
+                              winSec = 30, 
+                              incSec = 15, 
+                              n = n)
+      df.mea = df.mea %>% 
+        mutate(
+          dyad = sprintf("MSYNC_%s", gsub("all_(.+)_0.*", "\\1", name)),
+          task = "CT",
+          method = meth
+        ) %>%
+        merge(., df.ccf.agg %>% ungroup() %>% 
+                filter(position == "B" & measure == "mean") %>%
+                select(dyad, phase, MEA.sync))
+      df.psync = rbind(df.psync, df.mea)
+      write_csv(df.psync, file.path(dt.path, "preprocessedMEA", "df_psync-CT.csv"))
+    }
+    # detach the CT data
+    detach('CT')
+  } else {
+    df.psync = read_csv(file.path(dt.path, "preprocessedMEA", "df_psync-CT.csv"))
   }
-  # detach the CT data
-  detach('CT')
-  
-  # at the mirror game  
-  attach(file.path(dt.path, "preprocessedMEA", "MEA_MG.Rdata"), name = 'MG')
-  for (meth in c("seg", "data")) {
-    df.mea = pseudosync(meth, mea.scaled, 
-                            sampRate = 120, 
-                            lagSec = 2,
-                            winSec = 30, 
-                            incSec = 1, 
-                            n = n)
-    df.mea = df.mea %>% 
-      mutate(
-        dyad  = sprintf("MSYNC_%s", gsub("all_(.+)_0.*", "\\1", name)),
-        task  = "MG",
-        method = meth,
-        phase = as.numeric(substr(name, nchar(name), nchar(name)))
-      ) %>%
-      merge(., df.ccf.agg %>% ungroup() %>% 
-              filter(position == "B" & measure == "mean") %>%
-              select(dyad, phase, MEA.sync))
+
+  # check if CT has been run before
+  if (!file.exists(file.path(dt.path, "preprocessedMEA", "df_psync-MG.csv"))) {
+    # at the mirror game
+    attach(file.path(dt.path, "preprocessedMEA", "MEA_MG.Rdata"), name = 'MG')
+    for (meth in c("seg")) { # ,"data"
+      df.mea = pseudosync(meth, mea.scaled,
+                              sampRate = 120,
+                              lagSec = 2,
+                              winSec = 30,
+                              incSec = 1,
+                              n = n)
+      df.mea = df.mea %>%
+        mutate(
+          dyad  = sprintf("MSYNC_%s", gsub("all_(.+)_0.*", "\\1", name)),
+          task  = "MG",
+          method = meth,
+          phase = as.numeric(substr(name, nchar(name), nchar(name)))
+        ) %>%
+        merge(., df.ccf.agg %>% ungroup() %>%
+                filter(position == "B" & measure == "mean") %>%
+                select(dyad, phase, MEA.sync))
+      df.psync = rbind(df.psync, df.mea)
+      write_csv(df.psync, file.path(dt.path, "preprocessedMEA", "df_psync-MG.csv"))
+    }
+    # detach the MG data
+    detach('MG')
+  } else {
+    df.mea = read_csv(file.path(dt.path, "preprocessedMEA", "df_psync-MG.csv"))
     df.psync = rbind(df.psync, df.mea)
-    write_csv(df.psync, file.path(dt.path, "preprocessedMEA", "df_psync-MG.csv"))
   }
-  # detach the MG data
-  detach('MG')
   
   # save the pseudosynchrony values
   write_csv(df.psync, file.path(dt.path, "preprocessedMEA", "df_psync.csv"))
@@ -158,7 +177,7 @@ if (!file.exists(file.path(dt.path, "preprocessedMEA", "df_psync.csv"))) {
 
 ```
 
-```{r comp_mea, eval=F}
+```{r comp_mea}
 
 df.pagg = df.psync %>%
   group_by(dyad, task, method) %>%
@@ -196,7 +215,7 @@ p1a = df.pagg %>%
                aes(group = name), colour = "black") +
   scale_fill_manual(values = custom.col[c(1,3)]) +
   scale_colour_manual(values = custom.col[c(1,3)]) +
-  labs(title = "Conversation task", 
+  labs(title = "Conversation task: segments", 
        x = "", 
        y = "") +
   theme_bw() + 
@@ -219,7 +238,7 @@ p1b = df.pagg %>%
                aes(group = name), colour = "black") +
   scale_fill_manual(values = custom.col[c(1,3)]) +
   scale_colour_manual(values = custom.col[c(1,3)]) +
-  labs(title = "Conversation task", 
+  labs(title = "Conversation task: data shuffling", 
        x = "", 
        y = "") +
   theme_bw() + 
@@ -227,13 +246,13 @@ p1b = df.pagg %>%
         plot.title = element_text(hjust = 0.5), 
         text = element_text(size = 12))
 
-aov.MG = anovaBF( value ~ name, 
+aov.MG = anovaBF( value ~ name,
                   df.pagg %>% filter(task != "CT"))
 
 aov.MG@bayesFactor
 interpret_bf(sort(aov.MG@bayesFactor$bf, decreasing = T)[1], log = T)
 
-p2 = df.pagg %>% 
+p2 = df.pagg %>%
   filter(task != "CT") %>%
   ggplot(., aes(x = name, y = value, fill = name, colour = name)) + #
   geom_rain(rain.side = 'f1x1',
@@ -248,19 +267,63 @@ p2 = df.pagg %>%
                aes(group = name), colour = "black") +
   scale_fill_manual(values = custom.col[c(1,3)]) +
   scale_colour_manual(values = custom.col[c(1,3)]) +
-  labs(title = "Mirror game", 
-       x = "", 
+  labs(title = "Mirror game",
+       x = "",
        y = "") +
-  theme_bw() + 
-  theme(legend.position = "none", 
-        plot.title = element_text(hjust = 0.5), 
+  theme_bw() +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5),
         text = element_text(size = 12))
 
-ggarrange(p1a, p1b, p2, ncol = 2)
+ggarrange(p1a, p1b, p2, 
+          ncol = 2)
 
 ```
 
-Synchrony in CT was not higher than pseudosync. Therefore, we will not analyse this any further for now until we figure it out. However, synchrony was higher in the MG task, so we can use these values. 
+For the mirror game, synchrony credibly exceeds pseudosynchrony based on segments; thus, we do not compute pseudosynchrony based on data. For the conversation task, synchrony only exceeds pseudosynchrony based on data. Let's see whether we have at least some dyads that exceeded pseudosynchrony based on segments in the conversation task. 
+
+```{r mea_sub}
+
+# initialise a dataframe
+df.sub = data.frame()
+
+# loop through dyads
+for (d in unique(df.psync$dyad)) {
+  df.seg = df.psync %>% filter(method == "seg" & dyad == d & task == "CT")
+  t = ttestBF(x = df.seg$psync, mu = mean(df.seg$MEA.sync))
+  df.sub = rbind(df.sub, 
+                 data.frame(
+                   dyad   = d,
+                   bf.log = t@bayesFactor$bf,
+                   psync = mean(df.seg$psync),
+                   MEA.sync = mean(df.seg$MEA.sync)
+                 ))
+}
+
+df.sub = df.sub %>%
+  mutate(
+    direction = if_else(psync < MEA.sync,
+                        "less", "greater"),
+    relevant = if_else(direction == "less" & bf.log >= 3, "credible", "not credible"),
+    interpretation = interpret_bf(t@bayesFactor$bf, log = T)
+  ) %>%
+  # merge with movement quantity
+  merge(., read_csv(file.path(dt.path, "MSYNC_mea_CT.csv"), show_col_types = F) %>%
+      select(dyad, total.mv) %>% distinct()) %>%
+  mutate_if(is.character, as.factor) %>%
+  write_csv(., file.path(dt.path, "preprocessedMEA", "df_psync_sub.csv"))
+
+df.sub %>% group_by(relevant) %>% count()
+
+# does it have anything to do with the overall movement quantity?
+aov.CT.mv = anovaBF(total.mv ~ relevant, data = df.sub)
+
+# nope, there is no difference between those
+aov.CT.mv@bayesFactor
+
+```
+
+About half the dyads did not exceed pseudosynchrony when shuffling the segments. We might want to come back and investigate this later. 
 
 # Speech data
 
@@ -345,7 +408,7 @@ res@bayesFactor[["bf"]]
 
 ```
 
-The t-tests show that there is a significant difference between the pseudosynchronisation values obtained through segment shuffling and the real synchronisation values in the case of turn-based synchronisation of intensity, pitch and articulation rate, with the real synchronisation values being higher. 
+The t-tests show that there is a significant difference between the pseudosynchronisation values obtained through segment shuffling and the real synchronisation values in the case of turn-based synchronisation of intensity and articulation rate, with the real synchronisation values being higher. However, for pitch this was not credibly the case. 
 
 ## Dyad level: timecourse pseudosynchrony based on CCF
 
@@ -482,26 +545,34 @@ if (!file.exists(file.path(dt.path, "preprocessedOP", "df_psync.csv"))) {
   # create a dataframe
   df.psync = data.frame()
   
-  # start with the conversation task 
-  attach(file.path(dt.path, "preprocessedOP", "OpenFace_CT.Rdata"), name = 'CT')
-  df.mea = pseudosync(ls.fakeAU, 
-                          sampRate = 120, 
-                          lagSec = 2, winSec = 7, incSec = 4, 
-                          n = n)
-  df.mea = df.mea %>% 
-    mutate(
-      dyad = gsub("(.+)_CT.*", "\\1", name),
-      phase = "CT", 
-      key  = gsub(".*_CT_(.+)", "\\1", name),
-      psync = as.numeric(psync)
-    ) %>%
-    merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
-            ungroup() %>% 
-            filter(position == "B" & measure == "mean") %>%
-            select(dyad, phase, key, OF.sync))
-  df.psync = rbind(df.psync, df.mea)
-  # detach the CT data
-  detach('CT')
+  for (task in c("CT", "MG")) {
+    # get the data
+    attach(file.path(dt.path, "preprocessedOP", 
+                     sprintf("OpenFace_%s.Rdata", task)), name = task)
+    for (meth in c("seg", "data")) {
+      df.mea = pseudosync(meth, ls.fakeAU, 
+                            sampRate = 120, 
+                            lagSec = 2, winSec = 7, incSec = 4, 
+                            n = n)
+      df.mea = df.mea %>% 
+        mutate(
+          dyad = gsub(sprintf("(.+)_%s.*", task), "\\1", name),
+          phase = task,
+          method = meth,
+          key  = gsub(sprintf(".*_%s_(.+)", task), "\\1", name),
+          psync = as.numeric(psync)
+        ) %>%
+        merge(., readRDS(file.path(dt.path, 
+                                   sprintf("MSYNC_AU_sync_%s.rds"))) %>% 
+                ungroup() %>% 
+                filter(position == "B" & measure == "mean") %>%
+                select(dyad, phase, key, OF.sync))
+      df.psync = rbind(df.psync, df.mea)
+    }
+    # detach the data
+    detach(task)
+    
+  }
   
   # save the pseudosynchrony values
   write_csv(df.psync, file.path(dt.path, "preprocessedOF", "df_psync.csv"))
@@ -523,43 +594,28 @@ if (!file.exists(file.path(dt.path, "preprocessedOF", "df_psync.csv"))) {
   # create a dataframe
   df.psync = data.frame()
   
-  # start with the conversation task 
+  # only do the conversation task 
   attach(file.path(dt.path, "preprocessedOF", "OpenFace_CT.Rdata"), name = 'CT')
-  df.mea = pseudosync("seg", 
-                      ls.fakeAU, 
-                      sampRate = 120, 
-                      lagSec = 2, winSec = 7, incSec = 4, 
-                      n = n)
-  df.mea = df.mea %>% 
-    mutate(
-      dyad = gsub("(.+)_CT.*", "\\1", name),
-      phase = "CT", 
-      method = "seg",
-      key  = gsub(".*_CT_(.+)", "\\1", name),
-      psync = as.numeric(psync)
-    ) %>%
-    merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
-            ungroup() %>% 
-            filter(position == "B" & measure == "mean") %>%
-            select(dyad, phase, key, OF.sync))
-  df.psync = rbind(df.psync, df.mea)
-  df.mea = pseudosync("data", 
-                      ls.fakeAU, 
-                      sampRate = 120, 
-                      lagSec = 2, winSec = 7, incSec = 4, 
-                      n = n)
-  df.mea = df.mea %>% 
-    mutate(
-      dyad = gsub("(.+)_CT.*", "\\1", name),
-      phase = "CT", 
-      method = "data",
-      key  = gsub(".*_CT_(.+)", "\\1", name),
-      psync = as.numeric(psync)
-    ) %>%
-    merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
-            ungroup() %>% 
-            filter(position == "B" & measure == "mean") %>%
-            select(dyad, phase, key, OF.sync))
+  for (meth in c("seg", "data")) {
+    df.mea = pseudosync(meth, 
+                        ls.fakeAU, 
+                        sampRate = 120, 
+                        lagSec = 2, winSec = 7, incSec = 4, 
+                        n = n)
+    df.mea = df.mea %>% 
+      mutate(
+        dyad = gsub("(.+)_CT.*", "\\1", name),
+        phase = "CT", 
+        method = meth,
+        key  = gsub(".*_CT_(.+)", "\\1", name),
+        psync = as.numeric(psync)
+      ) %>%
+      merge(., readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>% 
+              ungroup() %>% 
+              filter(position == "B" & measure == "mean") %>%
+              select(dyad, phase, key, OF.sync))
+    df.psync = rbind(df.psync, df.mea)
+  }
   df.psync = rbind(df.psync, df.mea)
   # detach the CT data
   detach('CT')
