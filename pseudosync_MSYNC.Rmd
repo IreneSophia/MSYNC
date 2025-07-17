@@ -309,7 +309,8 @@ df.sub = df.sub %>%
   ) %>%
   # merge with movement quantity
   merge(., read_csv(file.path(dt.path, "MSYNC_mea_CT.csv"), show_col_types = F) %>%
-      select(dyad, total.mv) %>% distinct()) %>%
+          filter(position == "B") %>%
+          select(dyad, total.mv) %>% distinct()) %>%
   mutate_if(is.character, as.factor) %>%
   write_csv(., file.path(dt.path, "preprocessedMEA", "df_psync_sub.csv"))
 
