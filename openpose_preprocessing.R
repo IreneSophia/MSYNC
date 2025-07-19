@@ -8,7 +8,7 @@ library(tidyverse)
 rm(list = ls())
 
 # set the task
-task = "MG"
+task = "CT"
 
 # set path
 if (Sys.getenv("LOGNAME") == "vilya") {
@@ -18,7 +18,7 @@ if (Sys.getenv("LOGNAME") == "vilya") {
 }
 
 # set paths and input files
-files = list.files(path = dt.path, pattern = sprintf(".*%s.*.csv", task))
+files = list.files(path = dt.path, pattern = sprintf("MSYNC.*%s.*.csv", task))
 
 # settings for the videos and durations
 fps      = 120
@@ -86,8 +86,6 @@ for (f in files){
       # compute a rolling mean
       x.ma = rollmean(x.ip, k = fps+1, fill = NA),
       y.ma = rollmean(y.ip, k = fps+1, fill = NA),
-      # convert frames to numbers
-      frame = as.numeric(frame),
       # convert keys to relevant names
       key = case_match(key, 
                        0  ~ "head",

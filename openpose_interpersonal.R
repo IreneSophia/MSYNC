@@ -1,6 +1,6 @@
 # (C) Irene Sophia Plank
 # 
-# This script takes the output of Motion Energy analysis and calculates INTER-
+# This script takes the preprocessed output of OpenPose and calculates INTER-
 # personal synchrony. 
 
 # clean workspace
@@ -36,11 +36,11 @@ skip = 10
 # Output:
 #     * fake MEA object that pretends to be a MEA object
 #
-fakeMEA = function(s1, s2, sampRate, ROI, id) {
+fakeMEA = function(s1, s2, sampRate, ROI, id, s) {
   mea = structure(list(all_01_01 = structure(list(MEA = structure(list(
     L = s1, R = s2), row.names = c(NA, -length(s1)), class = "data.frame"), 
-    ccf = NULL, ccfRes = NULL), id = id, session = "01", group = ROI, sampRate = sampRate, 
-    filter = "raw", ccf = "", s1Name = "L", s2Name = "R", uid = paste0(ROI, "_", id, "_01"), 
+    ccf = NULL, ccfRes = NULL), id = id, session = s, group = ROI, sampRate = sampRate, 
+    filter = "raw", ccf = "", s1Name = "L", s2Name = "R", uid = paste0(ROI, "_", id, "_", s), 
     class = c("MEA","list"))), class = "MEAlist", nId = 1L, n = 1L, groups = ROI, sampRate = sampRate, 
     filter = "raw", s1Name = "L", s2Name = "R", ccf = "")
   return(mea)
@@ -50,36 +50,56 @@ fakeMEA = function(s1, s2, sampRate, ROI, id) {
 
 df.ref = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s_ref.rds", task)))
 
+# add phase to CT task
+if (task == "CT") {
+  df.ref$phase = "1"
+}
+
 # initialise "mea" list
 mea = c()
 
 for (d in unique(df.ref$dyad)) {
   
   # select the relevant data
-  df.sel = df.ref %>%
+  df.dyad = df.ref %>%
     filter(dyad == d)
 
   # extract relevant info
   id  =  gsub("MSYNC_(.+)", "\\1", d)
   
-  # loop through the keypoints
-  for (k in unique(df.sel$key)) {
-    # extract the relevant datapoints: mirrored for left/right
-    if (grepl("_R", k)) {
-      L = df.sel[df.sel$key == k,]$L
-      R = df.sel[df.sel$key == gsub("R", "L", k),]$R
-    } else if (grepl("_L", k)) {
-      L = df.sel[df.sel$key == k,]$L
-      R = df.sel[df.sel$key == gsub("L", "R", k),]$R
-    } else {
-      L = df.sel[df.sel$key == k,]$L
-      R = df.sel[df.sel$key == k,]$R
+  # loop through the phases
+  for (p in unique(df.dyad$phase)) {
+    
+    # loop through the axis 
+    for (a in unique(df.dyad$axis)) {
+      
+      # focus on this phase and axis
+      df.sel = df.dyad %>% 
+        filter(phase == p & axis == a) %>%
+        arrange(key, frame)
+      
+      # loop through the keypoints
+      for (k in unique(df.sel$key)) {
+        
+        # extract the relevant datapoints: mirrored for left/right
+        if (grepl("_R", k)) {
+          L = df.sel[df.sel$key == k,]$L
+          R = df.sel[df.sel$key == gsub("R", "L", k),]$R
+        } else if (grepl("_L", k)) {
+          L = df.sel[df.sel$key == k,]$L
+          R = df.sel[df.sel$key == gsub("L", "R", k),]$R
+        } else {
+          L = df.sel[df.sel$key == k,]$L
+          R = df.sel[df.sel$key == k,]$R
+        }
+        # create fakeMEA object for this dyad and keypoint
+        mea.sel = fakeMEA(L, R, fps, paste0(a, k), id, p)
+        names(mea.sel) = paste0(a, k, "_", id, "_0", p)
+        # add it to the mea list
+        mea = c(mea, mea.sel)
+      }
     }
-    # create fakeMEA object for this dyad and keypoint
-    mea.sel = fakeMEA(L, R, fps, k, id)
-    names(mea.sel) = paste0(k, "_", id, "_01")
-    # add it to the mea list
-    mea = c(mea, mea.sel)
+    
   }
 }
 
@@ -106,6 +126,18 @@ if (task == "CT") {
                    r2Z = T,
                    ABS = T)
 }
+
+
+# Save workspace ----------------------------------------------------------
+
+# clean workspace
+rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task")))
+
+# save workspace
+save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s.Rdata", task)))
+
+
+# Extract relevant values -------------------------------------------------
 
 # visual inspection
 pdf(file = file.path(dt.path[1], sprintf("heatmaps_%s.pdf", task)))  
@@ -156,8 +188,10 @@ df.ccf = df.ccf %>%
   separate("ID", sep = "_", into = c("key", "dyad", "phase")) %>%
   mutate(
     IPSmov = if_else(IPSmov != -Inf, IPSmov, NA),
-    dyad = paste0("MSYNC_", dyad)
-  ) 
+    dyad = paste0("MSYNC_", dyad),
+    axis = substr(key, 1, 1), 
+    key  = substr(key, 2, nchar(key))
+  )
 
 if (task == "CT") {
   df.ccf$phase = "CT"
@@ -165,7 +199,7 @@ if (task == "CT") {
 
 # aggregate the synchrony values
 df.ccf.agg = df.ccf %>% 
-  group_by(dyad, key, position, phase, measure) %>%
+  group_by(dyad, axis, key, position, phase, measure) %>%
   summarise(
     IPSmov = mean(IPSmov, na.rm = T)
   )
@@ -201,11 +235,4 @@ df = merge(
 # save data frame
 write_csv(df, file.path(dt.path[2], sprintf("MSYNC_OP_%s.csv", task)))
 
-# Save workspace ----------------------------------------------------------
-
-# clean workspace
-rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task")))
-
-# save workspace
-save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s.Rdata", task)))
 
