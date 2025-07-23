@@ -8,7 +8,7 @@ library(tidyverse)
 rm(list = ls())
 
 # set the task
-task = "CT"
+task = "MG"
 
 # set path
 if (Sys.getenv("LOGNAME") == "vilya") {
@@ -91,12 +91,12 @@ for (f in files){
                        0  ~ "head",
                        1  ~ "neck",
                        2  ~ "shoulderL",
-                       3  ~ "ellbowL",
+                       3  ~ "elbowL",
                        4  ~ "handL", 
                        5  ~ "shoulderR", 
-                       6  ~ "ellbowR", 
+                       6  ~ "elbowR", 
                        7  ~ "handR", 
-                       8  ~ "ref",
+                       8  ~ "hip",
                        9  ~ "hipL",
                        10 ~ "kneeL",
                        11 ~ "footL",
@@ -116,10 +116,10 @@ for (f in files){
       dist   = sqrt(x.diff**2 + y.diff**2)
     ) %>% ungroup()
   
-  # use keypoint 8 as reference for postural mirroring
+  # use keypoint 8 (the hip) as reference for postural mirroring
   tmp.ref = merge(
     tmp %>% ungroup() %>%
-      filter(key == "ref") %>%
+      filter(key == "hip") %>%
       mutate(
         x.ref = x.ma, 
         y.ref = y.ma
@@ -129,9 +129,24 @@ for (f in files){
     mutate(
       x = x.ma - x.ref,
       y = y.ma - y.ref
-    ) %>% filter(key != "ref") %>%
+    ) %>% filter(key != "hip") %>%
     select(dyad, phase, side, key, frame, x, y) %>%
-    # if on the right side, then flip it
+    # if on the right side, then flip the person
+    mutate(
+      x = if_else(side == "R", x * (-1), x)
+    ) %>%
+    pivot_longer(cols = c(x, y), names_to = "axis") %>%
+    pivot_wider(names_from = side, values_from = value) %>%
+    arrange(key, axis, frame)
+  
+  # restructure the original dataframe without referencing
+  tmp = tmp %>%
+    mutate(
+      x = x.ma,
+      y = y.ma
+    ) %>% 
+    select(dyad, phase, side, key, frame, x, y, dist) %>%
+    # if on the right side, then flip the person
     mutate(
       x = if_else(side == "R", x * (-1), x)
     ) %>%
@@ -155,7 +170,7 @@ if (task == "CT") {
 df.ref %>% group_by(dyad, phase, key, axis) %>%
   summarise(
     valid = min(sum(!is.na(L))/max.dt, sum(!is.na(R))/max.dt)
-  ) %>% filter(valid <= 2/3) %>% arrange(valid)
+  ) %>% filter(valid <= 2/3)
 
 # need to exclude MSYNC_15 for CT
 if (task == "CT") {
