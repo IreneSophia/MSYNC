@@ -175,15 +175,14 @@ df.ccf.agg = df.ccf %>%
 
 # aggregate total movement and merge with ccf
 df.mov = df.mea %>%
-  group_by(dyad) %>%
+  mutate(phase = as.factor(phase)) %>%
+  group_by(dyad, phase) %>%
   summarise(
-    L_total.mv = sum(L.ip > 0, na.rm = T)/ n(),
-    R_total.mv = sum(R.ip > 0, na.rm = T) / n(),
-    B_total.mv = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n()
+    L = sum(L.ip > 0, na.rm = T)/ n(),
+    R = sum(R.ip > 0, na.rm = T) / n(),
+    B = sum(L.ip > 0 | R.ip > 0, na.rm = T)/ n()
   ) %>%
-  pivot_longer(cols = where(is.numeric)) %>%
-  separate(name, into = c("position", "AOI"), sep = "_") %>%
-  pivot_wider(names_from = AOI, values_from = value)
+  pivot_longer(cols = where(is.numeric), names_to = "position", values_to = "total.mv")
 
 # merge together
 df = merge(df.ccf.agg, df.mov)
