@@ -48,7 +48,17 @@ fakeMEA = function(s1, s2, sampRate, ROI, id, s) {
 
 # Read in data ------------------------------------------------------------
 
-df.ref = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s_ref.rds", task)))
+if (task == "MG") {
+  type = "noref"
+  filename = sprintf("MSYNC_OP_%s.rds", task)
+} else {
+  type = "ref"
+  filename = sprintf("MSYNC_OP_%s_ref.rds", task)
+}
+
+print(filename)
+
+df.ref = readRDS(file.path(dt.path[1], filename))
 
 # add phase to CT task
 if (task == "CT") {
@@ -134,7 +144,7 @@ if (task == "CT") {
 rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task")))
 
 # save workspace
-save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s.Rdata", task)))
+save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s_%s.Rdata", task, type)))
 
 
 # Extract relevant values -------------------------------------------------
@@ -204,28 +214,22 @@ df.ccf.agg = df.ccf %>%
     IPSmov = mean(IPSmov, na.rm = T)
   )
 
-# load information on movement in general
+# load information on movement and summarise it
 df.mov = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s.rds", task))) %>%
-  rename("position" = "side") %>%
-  select(dyad, position, key, frame, dist)
+  rename("position" = "side")
 
-# summarise the movement quantity
-df.mov.agg = rbind(
-  df.mov %>% 
-    mutate(
-      key = case_when(
-        grepl("L", key) & position == "R" ~ gsub("L", "R", key),
-        grepl("R", key) & position == "R" ~ gsub("R", "L", key),
-        T ~ key
-      ),
-      position = "B"
-    ),
-  df.mov) %>%
-  filter(key != "ref") %>%
-  group_by(dyad, position, key) %>%
+df.mov.agg = df.mov %>%
+  group_by(dyad, position, phase) %>%
   summarise(
-    QNTmov = sum(dist, na.rm = T)
+    QNTmov = mean(dist, na.rm = T)
   )
+
+# add the movement for both
+df.mov.agg = rbind(
+  df.mov.agg, 
+  df.mov.agg %>% group_by(dyad, phase) %>% summarise(QNTmov = sum(QNTmov)) %>%
+    mutate(position = "B")
+)
 
 # merge the dataframes
 df = merge(
@@ -233,6 +237,6 @@ df = merge(
   df.ccf.agg)
 
 # save data frame
-write_csv(df, file.path(dt.path[2], sprintf("MSYNC_OP_%s.csv", task)))
+write_csv(df, file.path(dt.path[2], sprintf("MSYNC_OP_%s_%s.csv", task, type)))
 
 
