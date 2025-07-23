@@ -29,6 +29,8 @@
 #     * peak: whether to apply peak picking or take grandaverage (default = F)
 #     * r2Z: whether to apply z transformation (BOOLEAN, default T)
 #     * ABS: whether to report absolute values (BOOLEAN, default T)
+#     * log: whether to print the progress into a log file (F for no, filename for yes)
+#     * seed: whether to set a specific seed (F for no, integer for yes)
 # Output:
 #     * df.psync: data frame in long format containing pseudosync values
 #
@@ -42,20 +44,39 @@ pacman::p_load(tidyverse, rMEA)
 # Data shuffling ----------------------------------------------------------
 
 pseudosync = function(method, mea, sampRate, lagSec, winSec, incSec, 
-                      n = 100, peak = F, r2Z = T, ABS = T) {
+                      n = 100, peak = F, r2Z = T, ABS = T,
+                      log = F, seed = F) {
   
   # create new data frame for pseudosync values
   cols = c("name", "psync")
   df.psync = data.frame(matrix(nrow = 0, ncol = length(cols)))
   colnames(df.psync) = cols
   
+  if (seed != F) {
+    set.seed(seed)
+    seed = as.character(seed)
+  } else {
+    seed = "random"
+  }
+  
   # check if there are elements in the list
   if (length(mea) < 1) stop('There are no elements in the list provided!')
 
+  total = length(mea)
+  prog  = -1
+  
   # go through all list elements
-  for (i in 1:length(mea)) {
+  for (i in 1:total) {
     
-    print(sprintf("%s: %i of %i", Sys.time(), i, length(mea)))
+    if (prog != round(i*10/total)) {
+      prog = round(i*10/total)
+      msg  = sprintf("%s: %i%% (seed %s)", 
+                     format(Sys.time(), '%Y-%m-%d %H:%M:%S'), prog*10, seed)
+      print(msg)
+      if (log != F) {
+        try(write(msg, log, append = TRUE))
+      }
+    }
     
     if (method == "seg") {
       # divide left and right into segments
