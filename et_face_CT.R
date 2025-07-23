@@ -47,12 +47,13 @@ df = merge(read_csv(file.path(dt.path[1], "fixations_on_face.csv")),
 
 # now we can aggregate the durations and compute dwell times for the individual
 df.agg = df %>%
-  group_by(subID) %>%
+  mutate(dyad = substr(subID, 1, 8)) %>%
+  group_by(subID, dyad) %>%
   mutate(
     total.dur.ms = sum(dur.ms),
     ROI = if_else(`fixation on face`, 'face', 'other')
   ) %>%
-  group_by(subID, ROI, total.dur.ms) %>%
+  group_by(subID, dyad, ROI, total.dur.ms) %>%
   summarise(
     dur.ms = sum(dur.ms)
   ) %>%
@@ -70,39 +71,41 @@ write_csv(df.agg, file.path(dt.path[2], "MSYNC_ET_CT_indi.csv"))
 df.face = df %>%
   filter(`fixation on face`) %>%
   mutate(
-    start.ms = round(`start timestamp [ns]`/1000000),
-    end.ms   = round(`end timestamp [ns]`/1000000),
+    start.aligned = `start timestamp [ns]` - clap,
+    end.aligned = `end timestamp [ns]` - clap,
+    start.ms = round(start.aligned/1000000),
+    end.ms   = round(end.aligned/1000000),
     dyad     = substr(subID, 1, 8),
     position = substr(subID, nchar(subID), nchar(subID))
   )
 
 # initialise dataframe
-df.dyad = df.face %>%
-  select(dyad) %>% 
-  distinct() %>%
-  mutate(
-    shared.ms = NA,
-    Comment = ""
-  )
+df.dyad = data.frame()
 
 # loop through dyad
-for (d in df.dyad$dyad) {
-  # initialise list of vectors
-  t = list()
+for (d in unique(df.face$dyad)) {
   # get the positions of the associated interaction partners
   pos = unique(df.face %>% filter(dyad == d) %>% select(position))$position
   if (length(pos) != 2) {
-    df.dyad[df.dyad$dyad == d,'Comment'] = "Not two interaction partners"
+    df.dyad = rbind(
+      df.dyad, 
+      data.frame(dyad = d, shared.ms = NA, 
+                 comment = 'Not two interaction partners')
+    )
     next
+  } else {
+    comment = ''
   }
+  # initialise empty list for the vectors
+  t = list()
   # loop through the positions
   for (po in pos) {
     # focus on this one person
     df.sel = df.face %>% filter(position == po & dyad == d)
     if (nrow(df.sel) == 0) {
-      df.dyad[df.dyad$dyad == d,'Comment'] = paste0(
-        df.dyad[df.dyad$dyad == d,'Comment'], 
-        sprintf("No relevant fixatios for %s; ", po))
+      comment = paste0(
+        comment,  
+        sprintf("No relevant fixations for %s; ", po))
       next
     }
     # initialise vector
@@ -115,9 +118,25 @@ for (d in df.dyad$dyad) {
     t[[po]] = x
   }
   # calculate overlap
-  shared.ms = length(intersect(t$L, t$R))
-  df.dyad[df.dyad$dyad == d, 'shared.ms'] = shared.ms
+  if (length(t) != 2) {
+    shared.ms = NA
+  } else {
+    shared.ms = length(intersect(t$L, t$R))
+  }
+  df.dyad = rbind(
+    df.dyad, 
+    data.frame(dyad = d, shared.ms, comment)
+  )
+  comment = ''
 }
+
+# add mean of total fixation duration for each dyad
+df.dyad = merge(df.dyad, 
+                df.agg %>% group_by(dyad) %>% 
+                  summarise(total.dur.ms.mean = mean(total.dur.ms))) %>%
+  mutate(
+    shared.perc = shared.ms/total.dur.ms.mean
+  )
 
 write_csv(df.dyad, file.path(dt.path[2], "MSYNC_ET_CT_dyad.csv"))
 
