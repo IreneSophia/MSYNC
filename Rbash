@@ -1,0 +1,26 @@
+#!/bin/bash
+
+while :
+do
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	sleep 10
+	Rscript pseudo2.R &
+	wait
+done
+
