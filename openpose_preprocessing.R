@@ -151,7 +151,11 @@ for (f in files){
       x = if_else(side == "R", x * (-1), x)
     ) %>%
     pivot_longer(cols = c(x, y), names_to = "axis") %>%
-    pivot_wider(names_from = side, values_from = value) %>%
+    pivot_wider(names_from = side, values_from = c(value, dist)) %>%
+    rename(
+      "L" = "value_L",
+      "R" = "value_R"
+    ) %>%
     arrange(key, axis, frame)
   
   df     = rbind(df, tmp)

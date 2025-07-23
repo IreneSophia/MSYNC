@@ -141,11 +141,10 @@ if (task == "CT") {
 # Save workspace ----------------------------------------------------------
 
 # clean workspace
-rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task")))
+rm(list = setdiff(ls(), c("mea", "mea.ccf", "dt.path", "fps", "task", "type")))
 
 # save workspace
 save.image(file = file.path(dt.path[1], sprintf("MSYNC_OP_%s_%s.Rdata", task, type)))
-
 
 # Extract relevant values -------------------------------------------------
 
@@ -214,22 +213,20 @@ df.ccf.agg = df.ccf %>%
     IPSmov = mean(IPSmov, na.rm = T)
   )
 
-# load information on movement and summarise it
-df.mov = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s.rds", task))) %>%
-  rename("position" = "side")
+# load information on movement
+df.mov = readRDS(file.path(dt.path[1], sprintf("MSYNC_OP_%s.rds", task)))
 
+# aggregate the movement
 df.mov.agg = df.mov %>%
-  group_by(dyad, position, phase) %>%
+  group_by(dyad, phase) %>%
   summarise(
-    QNTmov = mean(dist, na.rm = T)
-  )
-
-# add the movement for both
-df.mov.agg = rbind(
-  df.mov.agg, 
-  df.mov.agg %>% group_by(dyad, phase) %>% summarise(QNTmov = sum(QNTmov)) %>%
-    mutate(position = "B")
-)
+    L = mean(dist_L, na.rm = T), 
+    R = mean(dist_R, na.rm = T)
+  ) %>% ungroup() %>%
+  mutate(
+    B = L + R
+  ) %>%
+  pivot_longer(cols = c('L', 'R', 'B'), names_to = "position", values_to = "QNTmov")
 
 # merge the dataframes
 df = merge(
