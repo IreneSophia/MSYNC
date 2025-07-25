@@ -170,7 +170,7 @@ createMSYNCdata = function(dt.path) {
     mutate_if(is.character, as.factor)
   
   ## OPENPOSE [!MISSING: only some keys?]
-  df.dyad.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG.csv")) %>%
+  df.dyad.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG_noref.csv")) %>%
     filter(position == "B") %>%
     rename("OP.total.mov" = "QNTmov") %>% 
     pivot_wider(names_from = measure, values_from = IPSmov, names_prefix = "OP.") %>%
@@ -181,7 +181,7 @@ createMSYNCdata = function(dt.path) {
     merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
-  df.indi.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG.csv")) %>%
+  df.indi.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG_noref.csv")) %>%
     filter(position != "B") %>%
     rename("OP.total.mov" = "QNTmov") %>% 
     pivot_wider(names_from = measure, values_from = IPSmov, names_prefix = "OP.") %>%
