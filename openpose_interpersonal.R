@@ -20,10 +20,14 @@ if (Sys.getenv("LOGNAME") == "vilya") {
 }
 
 # set the task 
-task = "MG"
+task = "CT"
 
 # set frame rate
-fps = 120
+if (task == "MG") {
+  fps = 120
+} else {
+  fps = 30
+}
 
 # seconds to ignore at the start
 skip = 10
@@ -48,13 +52,10 @@ fakeMEA = function(s1, s2, sampRate, ROI, id, s) {
 
 # Read in data ------------------------------------------------------------
 
-if (task == "MG") {
-  type = "noref"
-  filename = sprintf("MSYNC_OP_%s.rds", task)
-} else {
-  type = "ref"
-  filename = sprintf("MSYNC_OP_%s_ref.rds", task)
-}
+type = "noref"
+filename = sprintf("MSYNC_OP_%s.rds", task)
+#type = "ref"
+#filename = sprintf("MSYNC_OP_%s_ref.rds", task)
 
 print(filename)
 
