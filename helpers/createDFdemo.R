@@ -31,7 +31,7 @@ createDFdemo = function(df.indi, ls.vars, grp.var) {
   # now we loop through our measurements to create our demographics table
   for (m in unique(df$name)) {
     # select the relevant part of df.sub
-    df.rel = df %>% filter(name == m)
+    df.rel = df %>% filter(name == m) %>% drop_na()
     # check which of the group's data is not normally distributed
     df.sht = df.rel %>% 
       group_by(group) %>%
@@ -45,7 +45,7 @@ createDFdemo = function(df.indi, ls.vars, grp.var) {
     # compute the ANOVA
     aov = anovaBF(value ~ group, data = df.rel)
     # get back the original, untransformed values 
-    df.rel = df %>% filter(name == m)
+    df.rel = df %>% filter(name == m) %>% drop_na()
     # put all the information into the demographics table
     for (g in ls.grp) {
       df.demo = rbind(df.demo, 

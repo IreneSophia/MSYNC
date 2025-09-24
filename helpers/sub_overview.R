@@ -1,3 +1,5 @@
+# Script to extract some subject-specific information, including their
+# dyad and order of tasks
 # (C) Irene Sophia Plank
 # 
 # clean workspace

@@ -1,3 +1,4 @@
+# Summarise the triggers for the eye-tracking data.
 # (C) Irene Sophia Plank
 # 
 # clean workspace

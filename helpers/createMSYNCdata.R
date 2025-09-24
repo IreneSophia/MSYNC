@@ -6,6 +6,9 @@ createMSYNCdata = function(dt.path) {
   # load library
   library(tidyverse)
   
+  # function to create a demographics overview
+  source("createDFdemo.R")
+  
   # get demo info for subjects
   df.indi = merge(
     read_csv(file.path(dt.path, "df_centraXX_final.csv")) %>%
@@ -29,11 +32,12 @@ createMSYNCdata = function(dt.path) {
                           "Kontaktlinsen" ~ "contacts",
                           .default = "none"
                           ),
-      gender = tolower(gender)
+      gender = tolower(gender),
+      ECR = anx + avoid
     ) %>%
     select(subID, dyad, role, order, age, gender, gender_identity, edu, vision, handedness,
            RAADS_final, IRI_final, ADC_final, ends_with("_MG"), ends_with("_conv"), 
-           CFT_iq, anx, avoid)
+           CFT_iq, ECR)
   
   # combine social experience
   df.exp = df.indi %>%
@@ -41,30 +45,38 @@ createMSYNCdata = function(dt.path) {
     mutate(
       ## adjust all to the same scale [0 to 1]
       # Mood Cohesien Trust goes from 0 to 10
-      close.sMG      = close_MG/10,
-      similar.sMG    = similar_MG/10,
-      connect.sMG    = connect_MG/10,
-      trust.sMG      = trust_MG/10,
-      close.sCT      = close_conv/10,
-      similar.sCT    = similar_conv/10,
-      connect.sCT    = connect_conv/10,
-      trust.sCT      = trust_conv/10,
+      mood.sMG       = mood_MG/10,
+      close.QSE.sMG      = close_MG/10,
+      similar.QSE.sMG    = similar_MG/10,
+      connect.QSE.sMG    = connect_MG/10,
+      trust.QSE.sMG      = trust_MG/10,
+      mood.sCT       = mood_conv/10,
+      close.QSE.sCT      = close_conv/10,
+      similar.QSE.sCT    = similar_conv/10,
+      connect.QSE.sCT    = connect_conv/10,
+      trust.QSE.sCT      = trust_conv/10,
       # IOS 1 to 7
-      IOS.sMG        = (IOS_MG-1)/6,
-      IOS.sCT        = (IOS_conv-1)/6,
+      IOS.QSE.sMG        = (IOS_MG-1)/6,
+      IOS.QSE.sCT        = (IOS_conv-1)/6,
       # rapport 0 to 6
-      smooth.sMG     = smooth_MG/6,
-      comfort.sMG    = comfort_MG/6,
-      smooth.sCT     = smooth_conv/6,
-      comfort.sCT    = comfort_conv/6,
+      likeable.sMG   = likeable_MG/6,
+      friendly.sMG   = friendly_MG/6,
+      attentive.sMG  = attentive_MG/6,
+      smooth.QSE.sMG     = smooth_MG/6,
+      comfort.QSE.sMG    = comfort_MG/6,
+      likeable.sCT   = likeable_conv/6,
+      friendly.sCT   = friendly_conv/6,
+      attentive.sCT  = attentive_conv/6,
+      smooth.QSE.sCT     = smooth_conv/6,
+      comfort.QSE.sCT    = comfort_conv/6,
       # post game questionnaire 1 to 5
-      enjoyment.sMG  = (enjoyment_MG-1)/4,
-      responsive.sMG = (responsive_MG-1)/4,
-      continue.sMG   = (continue_MG-1)/4
+      enjoyment.QSE.sMG  = (enjoyment_MG-1)/4,
+      responsive.QSE.sMG = (responsive_MG-1)/4,
+      continue.QSE.sMG   = (continue_MG-1)/4
     ) %>%
     mutate(
-      soc.exp.MG     = rowMeans(select(., ends_with(".sMG"))),
-      soc.exp.CT     = rowMeans(select(., ends_with(".sCT")))
+      soc.exp.MG     = rowMeans(select(., ends_with(".QSE.sMG"))),
+      soc.exp.CT     = rowMeans(select(., ends_with(".QSE.sCT")))
     )
   
   # merge together
@@ -74,6 +86,12 @@ createMSYNCdata = function(dt.path) {
   df.key.pseudo = read_csv(file.path(dt.path, "preprocessedOF", 
                                      "df_psync_key_OF.csv")) %>%
     filter(relevant == "credible")
+  ls.aus = unique(df.key.pseudo$key)
+  
+  # read in info on NOT passing pseudosync test for OP
+  df.key.pseudo  = read_csv(file.path(dt.path, "preprocessedOP", 
+                                      "df_psync_key_OP_MG.csv")) %>%
+    filter(relevant == "not credible")
   ls.keys = unique(df.key.pseudo$key)
   
   # add information on the dyads
@@ -99,26 +117,18 @@ createMSYNCdata = function(dt.path) {
   
   ## EYE-TRACKING DATA
   df.indi.mg.et = read_csv(file.path(dt.path, "MSYNC_ET_MG_indi.csv")) %>%
-    pivot_wider(names_from = ROI, values_from = c(dur.ms, dwell)) %>%
-    mutate(
-      dyad = substr(subID, 1, 8)
-    ) %>% merge(., df.dyad %>% select(dyad, order)) %>%
+    merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(subID, dyad, order) %>%
     mutate_if(is.character, as.factor)
   df.indi.ct.et = read_csv(file.path(dt.path, "MSYNC_ET_CT_indi.csv")) %>%
-    pivot_wider(names_from = ROI, values_from = c(dur.ms, dwell)) %>%
-    mutate(
-      dyad = substr(subID, 1, 8)
-    ) %>% merge(., df.dyad %>% select(dyad, order)) %>%
+    merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(subID, dyad, order) %>%
     mutate_if(is.character, as.factor)
   df.dyad.mg.et = read_csv(file.path(dt.path, "MSYNC_ET_MG_dyad.csv")) %>%
-    select(-comment) %>%
     merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
   df.dyad.ct.et = read_csv(file.path(dt.path, "MSYNC_ET_CT_dyad.csv")) %>%
-    select(-comment) %>%
     merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
@@ -169,9 +179,9 @@ createMSYNCdata = function(dt.path) {
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
   
-  ## OPENPOSE [!MISSING: only some keys?]
+  ## OPENPOSE 
   df.dyad.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG_noref.csv")) %>%
-    filter(position == "B") %>%
+    filter(position == "B" & !(key %in% ls.keys)) %>%
     rename("OP.total.mov" = "QNTmov") %>% 
     pivot_wider(names_from = measure, values_from = IPSmov, names_prefix = "OP.") %>%
     mutate(
@@ -182,7 +192,7 @@ createMSYNCdata = function(dt.path) {
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
   df.indi.mg.op = read_csv(file.path(dt.path, "MSYNC_OP_MG_noref.csv")) %>%
-    filter(position != "B") %>%
+    filter(position != "B" & !(key %in% ls.keys)) %>%
     rename("OP.total.mov" = "QNTmov") %>% 
     pivot_wider(names_from = measure, values_from = IPSmov, names_prefix = "OP.") %>%
     mutate(
@@ -195,14 +205,14 @@ createMSYNCdata = function(dt.path) {
   
   ## OPENFACE > only keys which exceeded pseudosynchrony
   df.dyad.ct.of = readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>%
-    ungroup() %>% filter(position == "B" & key %in% ls.keys) %>% 
+    ungroup() %>% filter(position == "B" & key %in% ls.aus) %>% 
     select(-position, -phase) %>%
     pivot_wider(names_from = measure, values_from = OF.sync, names_prefix = "OF.") %>%
     merge(., df.dyad %>% select(dyad, order)) %>%
     relocate(dyad, order) %>%
     mutate_if(is.character, as.factor)
   df.indi.ct.of = readRDS(file.path(dt.path, "MSYNC_AU_sync_CT.rds")) %>%
-    ungroup() %>% filter(position != "B" & key %in% ls.keys) %>% 
+    ungroup() %>% filter(position != "B" & key %in% ls.aus) %>% 
     mutate(
       subID = paste0(dyad, "_", position), 
       position = NULL, phase = NULL
@@ -217,10 +227,16 @@ createMSYNCdata = function(dt.path) {
     relocate(subID, dyad, order) %>%
     mutate_if(is.character, as.factor)
   
+  
+  # create a demographics overview
+  ls.vars = c("age", "edu", "RAADS_final", "IRI_final", "ADC_final", 
+              "CFT_iq", "ECR")
+  df.demo = createDFdemo(df.indi, ls.vars, grp.var = "order")
+  
   ls.vars = ls()
   
   # save it all
-  save(list = ls.vars[grepl("^df.dyad.*|^df.indi.*", ls.vars)],
+  save(list = ls.vars[grepl("^df.dyad.*|^df.indi.*|^df.demo", ls.vars)],
        file = "MSYNC_data.RData")
   
 }

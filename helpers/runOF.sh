@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Bash script to run OpenFace on Ubuntu
+
 # set our directories
 dirout="preprocessedOF"
 

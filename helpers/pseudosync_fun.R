@@ -41,7 +41,9 @@
 if(!("pacman" %in% installed.packages()[,"Package"])) install.packages("pacman")
 pacman::p_load(tidyverse, rMEA) 
 
-# Data shuffling ----------------------------------------------------------
+
+# pseudosync function -----------------------------------------------------
+
 
 pseudosync = function(method, mea, sampRate, lagSec, winSec, incSec, 
                       n = 100, peak = F, r2Z = T, ABS = T,
