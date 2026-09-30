@@ -1,0 +1,1046 @@
+---
+title: "Supplementary materials"
+subtitle: "MSYNC - Conversation Task"
+author: "I. S. Plank"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+pdf-engine: lualatex
+fontsize: 10pt
+geometry: margin=12mm
+execute:
+  warning: false
+header-includes:
+# Add the S before section, figure and table numbers
+- \renewcommand{\thesection}{S\arabic{section}}
+- \renewcommand{\thetable}{S\arabic{table}} 
+- \renewcommand{\thefigure}{S\arabic{figure}} 
+---
+
+```{r settings, include=FALSE}
+
+knitr::opts_chunk$set(echo = F, warning = F, message = F, fig.align = 'center', 
+                      fig.width = 7.5, fig.height = 4)
+ls.packages = c("knitr",# kable
+    "brms",             # Bayesian lmms
+    "tidyverse",        # tibble stuff
+    "ggpubr",           # ggarrange
+    "bayesplot",        # plots for posterior predictive checks
+    "rstatix",          # anova
+    "corrplot",         # correlation plots, corrplot
+    "BayesFactor", 
+    "FactoMineR",       # pca
+    "easystats",        # equivalence_test, correlation
+    "psych"             # unidim
+)
+
+# if packman is not installed yet, install it
+if(!("pacman" %in% installed.packages()[,"Package"])) install.packages("pacman")
+pacman::p_load(char = ls.packages) 
+
+# set cores
+options(mc.cores = parallel::detectCores())
+
+# set option for reading in data
+options(readr.show_col_types = FALSE)
+
+# set options for brms
+options(brms.backend = "cmdstanr")
+
+# using parallel processing
+library(future)
+plan(multisession)
+
+# Setup caching of results
+brms_dir = "./_brms_models"
+if(!dir.exists(brms_dir)) {
+  dir.create(brms_dir)
+}
+
+# scale function for vector
+scale_this = function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+
+# function to create and load data
+source("helpers/createMSYNCdata.R")
+
+# create string of packages
+txt = ''
+for (package in ls.packages) {
+  txt = sprintf("%s%s version %s; ", txt, package, packageVersion(package))
+}
+
+c_light = "#a9afb2"; c_dark = "#0072b2"
+
+```
+
+# Introduction
+
+This R Markdown script analyses Conversation Task data from the MSYNC project. The data was preprocessed before being read into this script. Here, we focus on the behavioural and the eye-tracking data. We use the following abbreviations:
+
+-   IPS : interpersonal synchrony between two interaction partners
+-   IPA : interpersonal adaptation, the amount one person adapts their behaviour to their interaction partner's behaviour
+-   QSE : quality of the social experience, collected through several self-reported measures
+
+```{r set}
+
+# number of simulations
+nsim = 500
+
+# set number of iterations and warmup for models
+iter = 3000
+warm = 1000
+
+# set the seed
+set.seed(2468)
+
+```
+
+## Package versions
+
+We used `r R.Version()$version.string` and the following packages in the creation of this document: `r txt`
+
+## General info
+
+We performed prior predictive checks as proposed in Schad, Betancourt and Vasishth (2020) using the SBC package in a separate file. All categorical predictors are set to sum-coding and all continuous predictors and outcomes are scaled. Names of scaled variables are preceded by an s to indicate the scaling.
+
+## Preparation and group comparisons
+
+First, we load the data and combine it with demographic information including the diagnostic status of the subjects. Then, we print some basic information on the participants and dyads.
+
+```{r prep_data}
+
+# load the CT data:
+load("MSYNC_data-CT.RData")
+
+# gender distribution
+tb.gen = xtabs(~ gender + cis, data = df.indi |> 
+                 mutate(cis = if_else(gender_identity == "Ja", "cisgender", "transgender")))
+
+# handedness
+tb.hnd = xtabs(~ handedness, data = df.indi)
+
+kable(
+  list(tb.gen, tb.hnd,  
+       df.dyad |> group_by(order, dyad.gender) |> count()),
+  caption = 'Participant and dyad counts for different demo variables.')
+
+df.sum = df.indi |> select(c("age", "edu", "RAADS_final", "IRI_final", "ADC_final", 
+                             "CFT_iq", "ECR")) |>
+  pivot_longer(cols = everything(), names_to = "measurement") |>
+  group_by(measurement) |>
+  summarise(
+    overall = sprintf("%.2f ±%.2f (%.0f to %.0f)", 
+                      mean(value, na.rm = T), 
+                      sd(value, na.rm = T), 
+                      min(value, na.rm = T), 
+                      max(value, na.rm = T))
+  )
+  
+
+kable(merge(df.demo, df.sum) |> arrange(bf.log) |>
+        mutate(bf.log = 
+                 if_else(
+                   bf.log > log(3), 
+                   sprintf("%.3f*", bf.log),
+                   sprintf("%.3f", bf.log))),
+      caption = "Demographic information and questionnaire values")
+
+
+```
+
+The interaction partner in one dyad differed `r sprintf("%.2f ±%.2f (%.0f to %.0f)", mean(df.dyad$dyad.age), sd(df.dyad$dyad.age), min(df.dyad$dyad.age), max(df.dyad$dyad.age))` years from each other.
+
+## Assessing the relationship between motion quantity and motion IPSmov
+
+```{r mov}
+
+# compute correlations on the dyad level
+kable(df.dyad.ct.mea |> 
+  group_by(order) |>
+  correlation(bayesian = T, select = 'MEA.total.mov',
+              select2 = c('MEA.mean', 'MEA.peak', 'MEA.plag', 'MEA.zero')) |>
+  select(Group, Parameter2, rho, CI_low, CI_high, pd) |>
+  # only print the credible ones
+  filter(pd > 0.975) |>
+  # highlight the credible ones
+  mutate(credible = if_else(pd > 0.975, '*', '')), 
+  digits = 4, caption = "Credible correlations on dyad level for CT")
+
+# compute correlations on the individual level > first for CT
+kable(df.indi.ct.mea |> 
+  group_by(order) |>
+  correlation(bayesian = T, select = 'MEA.total.mov',
+              select2 = c('MEA.mean', 'MEA.peak', 'MEA.plag')) |>
+  select(Group, Parameter2, rho, CI_low, CI_high, pd) |>
+  # only print the credible ones
+  filter(pd > 0.975) |>
+  # highlight the credible ones
+  mutate(credible = if_else(pd > 0.975, '*', '')), 
+  digits = 4, caption = "Credible correlations on individual level for CT")
+
+```
+
+Since movement quantity and peak as well as average IPSmov/IPAmov are highly correlated in the conversation task, we will add this into our model as a predictor of no interest.
+
+## Assessing the uniformity of QSE
+
+We want to aggregate several scores from our questionnaires to measure the quality of the QSE. Thus, we check now if these scores are likely to measure one uniform concept. 
+
+```{r uni}
+
+print("CT")
+rel.ct = unidim(df.indi |> 
+  select(ends_with(".sCT")))
+rel.ct
+
+M = cor(df.indi |> select(ends_with(".sCT")))
+testRes = cor.mtest(df.indi |> select(ends_with(".sCT")), conf.level = 0.95)
+corrplot.mixed(M, order = 'AOE', tl.pos = "lt", p.mat = testRes$p, 
+               insig = "blank", number.cex = 0.75, tl.cex = 0.5)
+
+```
+
+## Setting weakly informed priors
+
+We will use the same priors for all of our models except the Bernoulli model which got its own priors.
+
+```{r priors}
+
+priors = c(
+  prior(normal(0,    0.10),  class = Intercept), # because standardised
+  prior(normal(1.0,  0.50),  class = sigma),
+  prior(normal(0.5,  0.50),  class = sd),        # less than sigma
+  prior(normal(0,    0.30),  class = b)          # small to medium effect
+)
+
+kable(priors, caption = "Priors for all Gaussian linear (mixed) models")  
+
+# Bernoulli
+priors.b = c(
+  prior(normal(0,    0.50),  class = Intercept), # because allocated 50:50
+  prior(normal(0,    1.00),  class = b)
+)
+
+kable(priors.b, caption = "Priors for the Bernoulli linear model")  
+
+```
+
+# Testing effect of order on IPSmov
+
+## Model setup
+
+```{r model_ct}
+
+# set the contrast
+contrasts(df.dyad.ct.mea$order) = contr.sum(2)
+contrasts(df.dyad.ct.mea$order)
+
+# code for filenames
+code = "CT_order"
+
+# scale the variables
+df.dyad.ct.mea = df.dyad.ct.mea |>
+     mutate(across(where(is.numeric), 
+                   .fns = scale_this,
+                   .names = "s{col}" ) )
+
+# model formula
+f = brms::bf( sMEA.mean ~ order + sMEA.total.mov)
+f
+
+```
+
+## Posterior predictive checks
+
+As the next step, we fit the model, check whether there are divergence or rhat issues, and then check whether the chains have converged.
+
+```{r postpc_ct1, fig.height=2, message=T}
+
+# fit the final model
+m = brm(f,
+        df.dyad.ct.mea, 
+        prior = priors |> filter(class != "sd"),
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 2684
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 3)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+This model has no pathological behaviour with E-BFMI, no divergent sample and no rhats that are higher or equal to 1.01. Therefore, we go ahead and perform our posterior predictive checks.
+
+```{r postpc_ct2, fig.height=2}
+
+# get posterior predictions
+post.pred = posterior_predict(m, ndraws = nsim)
+
+# check the fit of the predicted data compared to the real data
+p1 = pp_check(m, ndraws = nsim) + 
+  theme_bw() + theme(legend.position = "none")
+
+# distributions of means compared to the real values per group
+p2 = ppc_stat_grouped(df.dyad.ct.mea$sMEA.mean, post.pred, df.dyad.ct.mea$order) + 
+  theme_bw() + theme(legend.position = "none")
+
+p = ggarrange(p1, p2, 
+          nrow = 1, ncol = 2, labels = "AUTO")
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+The overall simulated data (in lightblue) fits the real data (in dark blue) reasonably well, even though it does not reproduce the shape completely. The mean simulated data based on the model fits well with the real data.
+
+## Inferences
+
+Now that we are convinced that we can trust our model, we have a look at its estimates.
+
+```{r inf_ct, fig.height=2, fig.width=4}
+
+# print a summary
+summary(m)
+
+# plot the posterior distributions
+post.draws |> 
+  select(starts_with("b_")) |>
+  pivot_longer(cols = starts_with("b_"), names_to = "coef", values_to = "estimate") |>
+  subset(!startsWith(coef, "b_Int")) |>
+  mutate(
+    coef = substr(coef, 3, nchar(coef)),
+    coef = str_replace_all(coef, "order1", "CT-MG"),
+    coef = fct_reorder(coef, desc(estimate))
+  )  |> 
+  group_by(coef) |>
+  mutate(
+    cred = case_when(
+      (mean(estimate) < 0 & quantile(estimate, probs = 0.95) < 0) |
+        (mean(estimate) > 0 & quantile(estimate, probs = 0.05) > 0) ~ "credible",
+      T ~ "not credible"
+    )
+  ) |> ungroup() |>
+  ggplot(aes(x = estimate, y = coef, fill = cred)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  ggdist::stat_halfeye(alpha = 0.7) + ylab(NULL) +
+  scale_fill_manual(values = c("credible" = c_dark, "not credible" = c_light)) + 
+  theme_bw() + theme(legend.position = "bottom", legend.direction = "horizontal")
+
+# "CT-MG" < "MG-CT"
+h.ct = hypothesis(m, "0 > 2*order1")
+
+```
+
+Assessing the effect of order on mean IPS results in the following *estimate* = `r round(h.ct$hypothesis$Estimate,2)` [`r round(h.ct$hypothesis$CI.Lower,2)`, `r round(h.ct$hypothesis$CI.Upper,2)`] (*posterior probability* = `r round(h.ct$hypothesis$Post.Prob*100,2)`%); thus, this suggests a `r interpret_cohens_d(h.ct$hypothesis$Estimate)` effect of order on IPS of movement in the Conversation Task. 
+
+## Rerun focusing on dyads passing the pseudo-IPSmov test
+
+Our comparison between pseudo-IPSmov and IPSmov did not reveal higher IPSmov across the board, but only for two-thirds of the sample. Therefore, we rerun the model on those dyads to ensure that the conclusions hold.
+
+```{r postpc_ct_sel1, fig.height=2, message=T}
+
+# select only the dyads for which pseudo-IPSmov based on segments lower than IPSmov
+df.sel = df.dyad.ct.mea |>
+  filter(dyad %in% df.dyad[df.dyad$relevant == "credible",]$dyad)
+
+# fit the final model
+m = brm(f,
+        df.sel, prior = priors |> filter(class != "sd"),
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s_sel", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 2684
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 3)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+```{r postpc_ct_sel2, fig.height=2}
+
+# get posterior predictions
+post.pred = posterior_predict(m, ndraws = nsim)
+
+# check the fit of the predicted data compared to the real data
+p1 = pp_check(m, ndraws = nsim) + 
+  theme_bw() + theme(legend.position = "none")
+
+# distributions of means compared to the real values per group
+p2 = ppc_stat_grouped(as.numeric(df.sel$sMEA.mean), post.pred, df.sel$order) + 
+  theme_bw() + theme(legend.position = "none")
+
+p = ggarrange(p1, p2, 
+          nrow = 1, ncol = 2, labels = "AUTO")
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+```{r inf_ct_sel, fig.height=2, fig.width=4}
+
+# print a summary
+summary(m)
+
+# plot the posterior distributions
+post.draws |> 
+  select(starts_with("b_")) |>
+  pivot_longer(cols = starts_with("b_"), names_to = "coef", values_to = "estimate") |>
+  subset(!startsWith(coef, "b_Int")) |>
+  mutate(
+    coef = substr(coef, 3, nchar(coef)),
+    coef = str_replace_all(coef, "order1", "CT-MG"),
+    coef = fct_reorder(coef, desc(estimate))
+  )  |> 
+  group_by(coef) |>
+  mutate(
+    cred = case_when(
+      (mean(estimate) < 0 & quantile(estimate, probs = 0.95) < 0) |
+        (mean(estimate) > 0 & quantile(estimate, probs = 0.05) > 0) ~ "credible",
+      T ~ "not credible"
+    )
+  ) |> ungroup() |>
+  ggplot(aes(x = estimate, y = coef, fill = cred)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  ggdist::stat_halfeye(alpha = 0.7) + ylab(NULL) +
+  scale_fill_manual(values = c("credible" = c_dark, "not credible" = c_light)) + 
+  theme_bw() +  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+# "CT-MG" < "MG-CT"
+h.ct2 = hypothesis(m, "0 > 2*order1")
+
+```
+
+Assessing the effect of order on mean IPS for these dyads only results in the following *estimate* = `r round(h.ct2$hypothesis$Estimate,2)` [`r round(h.ct2$hypothesis$CI.Lower,2)`, `r round(h.ct2$hypothesis$CI.Upper,2)`] (*posterior probability* = `r round(h.ct2$hypothesis$Post.Prob*100,2)`%); thus, this suggests a `r interpret_cohens_d(h.ct2$hypothesis$Estimate)` effect of order on IPS of movement in the Conversation Task when only considering dyads for which pseudo-IPS exceeded observed IPS. 
+
+# Exploring increasing social experience across the experiment
+
+```{r model_ct_qset}
+
+code = "CT_qse-task"
+
+df.qse = df.indi |>
+  select(subID, dyad, order, soc.exp.CT, soc.exp.MG) |>
+  mutate(
+    QSE.first  = if_else(order == "MG-CT", soc.exp.MG, soc.exp.CT),
+    QSE.second = if_else(order != "MG-CT", soc.exp.MG, soc.exp.CT)
+  ) |>
+  mutate(across(c(QSE.first, QSE.second), scale_this, .names = "s{.col}")) |>
+  mutate(order = as.factor(order))
+  
+
+contrasts(df.qse$order) = contr.sum(2)
+contrasts(df.qse$order)
+
+# model formula
+f = brms::bf( sQSE.second ~ sQSE.first * order + (1 | dyad) )
+f
+
+
+```
+
+```{r postpc_ct_qset1, fig.height=2, message=T}
+
+# fit the final model
+m = brm(f,
+        df.qse, prior = priors,
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 8484
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 4)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+This model has no pathological behaviour with E-BFMI, no divergent sample and no rhats that are higher or equal to 1.01. Therefore, we go ahead and perform our posterior predictive checks.
+
+```{r postpc_ct_qset2, fig.height=2}
+
+# check the fit of the predicted data compared to the real data
+p = pp_check(m, ndraws = nsim) + 
+  theme_bw() + theme(legend.position = "none")
+
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+The overall simulated data fits reasonably well. Now that we are convinced that we can trust our model, we have a look at its estimates.
+
+```{r inf_ct_qset1, fig.height=3.25, fig.width=4}
+
+# print a summary
+summary(m)
+
+# plot the posterior distributions
+post.draws |> 
+  select(starts_with("b_")) |>
+  pivot_longer(cols = starts_with("b_"), names_to = "coef", values_to = "estimate") |>
+  subset(!startsWith(coef, "b_Int")) |>
+  mutate(
+    coef = substr(coef, 3, nchar(coef)),
+    coef = fct_reorder(coef, desc(estimate))
+  )  |> 
+  group_by(coef) |>
+  mutate(
+    cred = case_when(
+      (mean(estimate) < 0 & quantile(estimate, probs = 0.975) < 0) |
+        (mean(estimate) > 0 & quantile(estimate, probs = 0.025) > 0) ~ "credible",
+      T ~ "not credible"
+    )
+  ) |> ungroup() |>
+  ggplot(aes(x = estimate, y = coef, fill = cred)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  ggdist::stat_halfeye(alpha = 0.7) + ylab(NULL) +
+  scale_fill_manual(values = c("credible" = c_dark, "not credible" = c_light)) + 
+  theme_bw() +  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+e.qse = hypothesis(
+  m, 
+  c(
+    "order1*2 > 0",
+    "sQSE.first > 0",
+    "sQSE.first + sQSE.first:order1 > 0", # order CT-MG slope
+    "sQSE.first - sQSE.first:order1 > 0", # order MG-CT slope
+    "2 * sQSE.first:order1 > 0"           # slope difference
+  ), alpha = 0.025)
+
+kable(e.qse$hypothesis |>
+        cbind(data.frame(
+          Effect = c("Order effect", "Overall slope", "CT-MG slope", "MG-CT slope", "Slope difference")
+        )) |> relocate(Effect), digits = 3, caption = "Development of social experience across task")
+
+```
+
+```{r inf_ct_qset2, fig.height=4}
+
+df.qse |> 
+  mutate(order = if_else(order == "MG-CT", 
+                         "Mirror Game first",
+                         "Movement first")) |> 
+  mutate_if(is.character, as.factor) |>
+  ggplot(aes(x = QSE.first, y = QSE.second, fill = order, colour = order)) + #
+  geom_point(size = 2, alpha = 0.5) +     
+  geom_smooth(method = "lm", alpha = 0.25) +
+  theme_bw() + ylim(0.25, 1) + xlim(0.25, 1) + 
+  theme(legend.position = "bottom", 
+        plot.title = element_text(hjust = 0.5), 
+        legend.direction = "horizontal", legend.title = element_blank(),
+        text = element_text(size = 15),
+        axis.text.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14))
+
+```
+
+# Exploring mediation analysis
+
+## Model setup
+
+```{r model_ct_qse}
+
+# code for filenames
+code = "CT_mediation"
+
+# scale the variables
+df.ct.mea.qse = 
+  merge(df.dyad.ct.mea |>
+          select(order, dyad, MEA.mean, MEA.total.mov), 
+        df.indi |> select(order, subID, dyad, soc.exp.CT) |>
+          group_by(order, dyad) |>
+          summarise(
+            soc.exp.CT = mean(soc.exp.CT),
+            .groups = "drop"
+          )) |>
+  mutate(across(where(is.numeric), 
+               .fns = scale_this,
+               .names = "s{col}" ) ) |>
+  mutate_if(is.character, as.factor)
+
+# set the contrast
+contrasts(df.ct.mea.qse$order) = contr.sum(2)
+contrasts(df.ct.mea.qse$order)
+
+# model formula
+f.QSE = brms::bf( ssoc.exp.CT ~ order + sMEA.mean + sMEA.total.mov)
+f.IPS = brms::bf( sMEA.mean ~ order + sMEA.total.mov)
+f.IPS
+f.QSE
+
+priors.new = get_prior(f.IPS + f.QSE + set_rescor(FALSE), data = df.ct.mea.qse) |>
+  mutate(
+    prior = case_when(
+      class == "Intercept" ~ "normal(0,   0.1)",
+      class == "sigma"     ~ "normal(1,   0.5)",
+      class == "sd"        ~ "normal(0.5, 0.5)",
+      class == "b"         ~ "normal(0,   0.3)"
+    )
+  )
+
+```
+
+## Posterior predictive checks
+
+As the next step, we fit the model, check whether there are divergence or rhat issues, and then check whether the chains have converged.
+
+```{r postpc_ct_qse1, fig.height=4, message=T}
+
+# fit the final model
+m = brm(f.IPS + f.QSE + set_rescor(FALSE),
+        data = df.ct.mea.qse, 
+        prior = priors.new,
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 2684
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 3)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+This model has no pathological behaviour with E-BFMI, no divergent sample and no rhats that are higher or equal to 1.01. Therefore, we go ahead and perform our posterior predictive checks.
+
+```{r postpc_ct_qse2, fig.height=2}
+
+# check the fit of the predicted data compared to the real data
+p1 = pp_check(m, ndraws = nsim, resp = "ssocexpCT") + 
+  theme_bw() + theme(legend.position = "none") + labs(title = "QSE")
+
+p2 = pp_check(m, ndraws = nsim, resp = "sMEAmean") + 
+  theme_bw() + theme(legend.position = "none") + labs(title = "IPS")
+
+p = ggarrange(p1, p2, 
+          nrow = 1, ncol = 2, labels = "AUTO")
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+The overall simulated data (in lightblue) fits the real data (in dark blue) reasonably well, even though it does not reproduce the shape completely. The mean simulated data based on the model fits well with the real data.
+
+## Inferences
+
+Now that we are convinced that we can trust our model, we have a look at its estimates.
+
+```{r inf_ct_qse, fig.height=3, fig.width=4}
+
+# print a summary
+summary(m)
+
+# summary statistics for mediation analysis
+df.med = post.draws |>
+  mutate(
+    "Order -> IPS -> QSE.CT" = b_sMEAmean_order1 * -2 * b_ssocexpCT_sMEA.mean,
+    "Order -> IPS" = b_sMEAmean_order1 * -2, 
+    "Order -> QSE.CT" = b_ssocexpCT_order1 * -2, 
+    "Total Effect" =  b_sMEAmean_order1 * -2 * b_ssocexpCT_sMEA.mean + b_ssocexpCT_order1 * -2
+  ) |>
+  rename("IPS -> QSE.CT" = b_ssocexpCT_sMEA.mean) |>
+  select(contains("->"), "Total Effect")
+  
+df.med.agg = df.med |>
+  pivot_longer(cols = everything(), names_to = "Parameter") |>
+  group_by(Parameter) |>
+  summarise(
+    Estimate = sprintf("%.3f +- %.3f [%.3f, %.3f]",
+                       mean(value), sd(value), 
+                       quantile(value, 0.025, names = F),
+                       quantile(value, 0.975, names = F)),
+    `Posterior Probability` = if_else(mean(value) > 0, 
+                                      mean(value > 0)*100,
+                                      mean(value < 0)*100)
+  )
+
+equ = equivalence_test(df.med, range = c(-0.1, 0.1))
+
+kable(merge(df.med.agg, equ) |>
+    mutate(ROPE = ROPE_Percentage * 100, 
+           `ROPE Interpretation` = ROPE_Equivalence, 
+           HDI = sprintf("[%.2f, %.2f]", HDI_low, HDI_high)) |> 
+      select(-CI, -contains("_")), digits = 2,
+      caption = "Results of the explorative mediation analysis")
+
+```
+
+# Exploring individual experience and behaviour in CT: extracting principal components
+
+```{r ct_pca}
+
+# check if PCA file exists
+if (!file.exists(file.path(brms_dir, "df_pca_CT.rds"))) {
+  # create a new dataframe with all the info
+  df.indi.ct.pc = df.indi |> 
+    select(subID, dyad, order, soc.exp.CT) |>
+    # add the information from MEA
+    merge(df.indi.ct.mea) |>
+    # add the information from openface
+    merge(df.indi.ct.of |> 
+            pivot_wider(names_from = key, 
+                        values_from = c(OF.mean, OF.peak, OF.plag))) |>
+    # add the face dwell time from the eye tracking
+    merge(df.indi.ct.et |> select(subID, dwell.face, FI, SI, SI.ratio, SI.FI)) |>
+    mutate_if(is.character, as.factor) |> drop_na()
+  # extract the features to be used
+  df.indi.ct.pc.features = df.indi.ct.pc |> 
+    select(where(is.numeric), -soc.exp.CT)
+  # normalise them
+  data.norm = scale(df.indi.ct.pc.features)
+  # perform the PCA
+  pca = princomp(data.norm)
+  saveRDS(pca, file.path(brms_dir, "pca_CT.rds"))
+  # add components to the data frame to explain 2/3 of the variance
+  df.indi.ct.pc$pc1 = pca$scores[,1]
+  df.indi.ct.pc$pc2 = pca$scores[,2]
+  df.indi.ct.pc$pc3 = pca$scores[,3]
+  df.indi.ct.pc$pc4 = pca$scores[,4]
+  saveRDS(df.indi.ct.pc, file.path(brms_dir, "df_pca_CT.rds"))
+} else {
+  pca = readRDS(file.path(brms_dir, "pca_CT.rds"))
+  df.indi.ct.pc = readRDS(file.path(brms_dir, "df_pca_CT.rds"))
+}
+
+fa.parallel(df.indi.ct.pc |> 
+              select(where(is.numeric), -soc.exp.CT, -starts_with("pc")), 
+            fa = "pc", plot = T)
+
+var_explained = pca$sdev^2 / sum(pca$sdev^2)
+cum_var = cumsum(var_explained)
+
+```
+
+In total, there are `r ncol(pca$scores)` components, of which `r which(cum_var > 2/3)[1]` are needed to explain at least 2/3 and `r which(cum_var > 0.9)[1]` to explain more than 90% of the variance. 
+
+## Predicting order from PCs
+
+We try to predict order by the principal components. Since this is a model with a binary outcome we use a Bernoulli distribution with logit. We code the order `CT-MG` as 0 and the order `MG-CT` as 1. Thus, we need to use different priors here, because we are using a logit link function.
+
+```{r model_ct_pc}
+
+# recode the order and scale the predictors + soc.exp
+df.indi.ct.pc = df.indi.ct.pc |>
+  mutate(
+    order.bin = if_else(order == "MG-CT", 1, 0)
+  ) |> mutate(across(c(pc1, pc2, pc3, pc4, soc.exp.CT), scale_this, .names = "s{.col}"))
+
+code = "CT_pcs-bern"
+
+# model formula
+f = brms::bf( order.bin ~ spc1 + spc2 + spc3 + spc4 )
+f
+
+
+```
+
+```{r postpc_ct_pc1, fig.height=4, message=T}
+
+# fit the final model
+m = brm(f,
+        df.indi.ct.pc, prior = priors.b,
+        family = bernoulli(link = "logit"),
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 4284
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 3)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+This model has no pathological behaviour with E-BFMI, no divergent sample and no rhats that are higher or equal to 1.01. Therefore, we go ahead and perform our posterior predictive checks.
+
+```{r postpc_ct_pc12, fig.height=2}
+
+# get posterior predictions
+post.pred = posterior_predict(m, ndraws = nsim)
+
+# check the fit of the predicted data compared to the real data
+p = ppc_bars(df.indi.ct.pc$order.bin, post.pred) + 
+  theme_bw() + theme(legend.position = "none")
+
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+The overall simulated data fits reasonably well. Now that we are convinced that we can trust our model, we have a look at its estimates.
+
+```{r inf_ct_pc1, fig.height=4.25, fig.width=4}
+
+# print a summary
+summary(m)
+
+# plot the posterior distributions
+df.m = post.draws |> 
+  select(starts_with("b_"))
+
+# plot the posterior distributions
+df.m |>
+  select(starts_with("b_")) |>
+  pivot_longer(cols = starts_with("b_"), names_to = "coef", values_to = "estimate") |>
+  subset(!startsWith(coef, "b_Int")) |>
+  mutate(
+    coef = substr(coef, 3, nchar(coef)),
+    coef = str_replace_all(coef, "order1", "CT-MG"),
+    coef = fct_reorder(coef, desc(estimate))
+  )  |> 
+  group_by(coef) |>
+  mutate(
+    cred = case_when(
+      (mean(estimate) < 0 & quantile(estimate, probs = 0.975) < 0) |
+        (mean(estimate) > 0 & quantile(estimate, probs = 0.025) > 0) ~ "credible",
+      T ~ "not credible"
+    )
+  ) |> ungroup() |>
+  ggplot(aes(x = estimate, y = coef, fill = cred)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  ggdist::stat_halfeye(alpha = 0.7) + ylab(NULL) +
+  scale_fill_manual(values = c("credible" = c_dark, "not credible" = c_light)) + 
+  theme_bw() +  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+# create a table with the hypothesis tests for each of the PCs
+df.hyp = data.frame()
+for (i in 1:4) {
+  e = hypothesis(m, sprintf("0 < spc%d", i), alpha = 0.025 )
+  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("0 > spc%d", i), alpha = 0.025 )
+  df.hyp = rbind(df.hyp, 
+                 data.frame(
+                   Parameter = sprintf("spc%d", i),
+                   Est = e$hypothesis$Estimate,
+                   Estimate  = sprintf("%.3f ± %.3f [%.3f, %.3f]", 
+                                       e$hypothesis$Estimate, e$hypothesis$Est.Error,
+                                       e$hypothesis$CI.Lower, e$hypothesis$CI.Upper),
+                   Post.Prob = e$hypothesis$Post.Prob
+                 ))
+}
+
+df.hyp = df.hyp |>
+  mutate(
+    `Posterior Probability` = if_else(Post.Prob > 0.975, 
+                                      sprintf("%.2f*", Post.Prob*100),
+                                      sprintf("%.2f", Post.Prob*100)),
+    `Effect size` = interpret_cohens_d(Est)
+  ) |> select(-Post.Prob, -Est)
+
+# equivalence tests
+df.equ = as.data.frame(equivalence_test(m, range = rope_range(m), parameters = "b_spc.*")) |>
+  rename(`ROPE Interpretation` = ROPE_Equivalence) |>
+  mutate(
+    Parameter = sub("b_", "", Parameter),
+    ROPE = round(ROPE_Percentage*100,2),
+    HDI = sprintf("[%.3f, %.3f]", HDI_low, HDI_high)
+  ) |> select(Parameter, ROPE, `ROPE Interpretation`, HDI)
+  
+
+# print the outcome of the tests
+kable(merge(df.hyp, df.equ), 
+      caption = sprintf("Explorative assessment of Bernoulli model predictors (ROPE Range = ±%.3f)",
+                        rope_range(m)[2])
+)
+
+```
+
+
+## Predicting social experience from PCs
+
+```{r model_ct_pc_qse}
+
+code = "CT_pcs-exp"
+
+contrasts(df.indi.ct.pc$order) = contr.sum(2)
+contrasts(df.indi.ct.pc$order)
+
+# model formula
+f = brms::bf( ssoc.exp.CT ~ spc1 + spc2 + spc3 + spc4 + order + (1 | dyad) )
+f
+
+
+```
+
+```{r postpc_ct_pc_qse1, fig.height=4, message=T}
+
+# fit the final model
+m = brm(f,
+        df.indi.ct.pc, prior = priors,
+        iter = iter, warmup = warm,
+        backend = "cmdstanr", threads = threading(8),
+        file = file.path(brms_dir, sprintf("m_%s", code)),
+        save_pars = save_pars(all = TRUE),
+        seed = 4284
+        )
+rstan::check_hmc_diagnostics(m$fit)
+
+# check that rhats are below 1.01
+sum(brms::rhat(m) >= 1.01, na.rm = T)
+
+# check the trace plots
+post.draws = as_draws_df(m)
+mcmc_trace(post.draws, regex_pars = "^b_",
+           facet_args = list(ncol = 3)) +
+  scale_x_continuous(breaks=scales::pretty_breaks(n = 3)) +
+  scale_y_continuous(breaks=scales::pretty_breaks(n = 3))
+
+```
+
+This model has no pathological behaviour with E-BFMI, no divergent sample and no rhats that are higher or equal to 1.01. Therefore, we go ahead and perform our posterior predictive checks.
+
+```{r postpc_ct_pc1_qse2, fig.height=2}
+
+# check the fit of the predicted data compared to the real data
+p = pp_check(m, ndraws = nsim) + 
+  theme_bw() + theme(legend.position = "none")
+
+annotate_figure(p, top = text_grob("Posterior predictive checks", 
+                                   face = "bold", size = 14))
+
+```
+
+The overall simulated data fits reasonably well. Now that we are convinced that we can trust our model, we have a look at its estimates.
+
+```{r inf_ct_pc1_qse, fig.height=4.25, fig.width=4}
+
+# print a summary
+summary(m)
+
+# plot the posterior distributions
+df.m = post.draws |> 
+  select(starts_with("b_"))
+
+# plot the posterior distributions
+df.m |>
+  select(starts_with("b_")) |>
+  pivot_longer(cols = starts_with("b_"), names_to = "coef", values_to = "estimate") |>
+  subset(!startsWith(coef, "b_Int")) |>
+  mutate(
+    coef = substr(coef, 3, nchar(coef)),
+    coef = str_replace_all(coef, "order1", "CT-MG"),
+    coef = fct_reorder(coef, desc(estimate))
+  )  |> 
+  group_by(coef) |>
+  mutate(
+    cred = case_when(
+      (mean(estimate) < 0 & quantile(estimate, probs = 0.975) < 0) |
+        (mean(estimate) > 0 & quantile(estimate, probs = 0.025) > 0) ~ "credible",
+      T ~ "not credible"
+    )
+  ) |> ungroup() |>
+  ggplot(aes(x = estimate, y = coef, fill = cred)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  ggdist::stat_halfeye(alpha = 0.7) + ylab(NULL) +
+  scale_fill_manual(values = c("credible" = c_dark, "not credible" = c_light)) + 
+  theme_bw() +  theme(legend.position = "bottom", legend.direction = "horizontal")
+
+# create a table with the hypothesis tests for each of the PCs
+df.hyp = data.frame()
+for (i in 1:4) {
+  e = hypothesis(m, sprintf("0 > -spc%d", i), alpha = 0.025 )
+  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("0 < -spc%d", i), alpha = 0.025 )
+  df.hyp = rbind(df.hyp, 
+                 data.frame(
+                   Parameter = sprintf("spc%d", i),
+                   Est = e$hypothesis$Estimate,
+                   Estimate  = sprintf("%.3f ± %.3f [%.3f, %.3f]", 
+                                       e$hypothesis$Estimate, e$hypothesis$Est.Error,
+                                       e$hypothesis$CI.Lower, e$hypothesis$CI.Upper),
+                   Post.Prob = e$hypothesis$Post.Prob
+                 ))
+}
+
+df.hyp = df.hyp |>
+  mutate(
+    `Posterior Probability` = if_else(Post.Prob > 0.975, 
+                                      sprintf("%.2f*", Post.Prob*100),
+                                      sprintf("%.2f", Post.Prob*100)),
+    `Effect size` = interpret_cohens_d(Est)
+  ) |> select(-Post.Prob, -Est)
+
+# equivalence tests
+df.equ = as.data.frame(equivalence_test(m, range = rope_range(m), parameters = "b_spc.*")) |>
+  rename(`ROPE Interpretation` = ROPE_Equivalence) |>
+  mutate(
+    Parameter = sub("b_", "", Parameter),
+    ROPE = round(ROPE_Percentage*100,2),
+    HDI = sprintf("[%.3f, %.3f]", HDI_low, HDI_high)
+  ) |> select(Parameter, ROPE, `ROPE Interpretation`, HDI)
+  
+
+# print the outcome of the tests
+kable(merge(df.hyp, df.equ), 
+      caption = sprintf("Explorative assessment of Bernoulli model predictors (ROPE Range = ±%.3f)",
+                        rope_range(m)[2])
+)
+
+```
+
+## PC loadings
+
+```{r pca_load_ct}
+
+df.tbl.pca = as.data.frame(round(pca$loadings[,1:8], 2)) |>
+  rename_with(~ sub("Comp\\.", "PC", .x))
+
+# all to get to 90% cumulative variance
+kable(df.tbl.pca, caption = "All PCs together explaining >90%")
+
+# focus on the "relevant" ones
+kable(df.tbl.pca |> select(PC1, PC2, PC3, PC4) |>
+        mutate_if(is.numeric, ~ if_else(abs(.) > 0.10, sprintf("%.2f", .), "")),
+      caption = "Most relevant PCs")
+
+```
