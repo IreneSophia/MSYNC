@@ -13,11 +13,11 @@ We share anonymised, preprocessed data in `MSYNC_data.RData` as well as all scri
 
 * `MSYNC_checkmodel.Rmd` contains code to perform simulation-based calibration of the models used to analyse the data
 * `MSYNC_pseudosync.Rmd` contains code to create pseudosynchrony values and compare these values to real synchrony values
-* `MSYNC_supps.Rmd` contains the main analysis code and results. 
+* `MSYNC_supps-CT.Rmd` and `MSYNC_supps-MG.Rmd` contain the main analysis code and results for the conversation task and the mirror game, respectively. 
 
-`MSYNC_data.RData` contains the following dataframes which can be loaded into R: 
+`MSYNC_data-CT.RData` and `MSYNC_data-MG.RData` contain the following dataframes which can be loaded into R: 
 
-* `df.demo`: group comparisons between the two orders (MG first or CT first)
+* `df.demo`: overall and group-specific questionnaire and demographic summaries, including comparisons between the two orders (MG first or CT first)
 * `df.dyad`: information on the dyad composition, columns:
 	* `dyad`: dyad identifier
 	* `order`: order of tasks (MG-CT or CT-MG)

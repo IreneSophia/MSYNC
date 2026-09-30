@@ -239,4 +239,12 @@ createMSYNCdata = function(dt.path) {
   save(list = ls.vars[grepl("^df.dyad.*|^df.indi.*|^df.demo", ls.vars)],
        file = "MSYNC_data.RData")
   
+  # save it separate for CT
+  save(list = ls.vars[grepl("^df.dyad.ct*|^df.indi.ct*|^df.demo$|^df.dyad$|^df.indi$", ls.vars)],
+       file = "MSYNC_data-CT.RData")
+  
+  # save it separate for MG
+  save(list = ls.vars[grepl("^df.dyad.mg*|^df.indi.mg*|^df.demo$|^df.dyad$|^df.indi$", ls.vars)],
+       file = "MSYNC_data-MG.RData")
+  
 }
