@@ -854,8 +854,8 @@ df.m |>
 # create a table with the hypothesis tests for each of the PCs
 df.hyp = data.frame()
 for (i in 1:4) {
-  e = hypothesis(m, sprintf("0 < spc%d", i), alpha = 0.025 )
-  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("0 > spc%d", i), alpha = 0.025 )
+  e = hypothesis(m, sprintf("spc%d > 0", i), alpha = 0.025 )
+  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("spc%d < 0", i), alpha = 0.025 )
   df.hyp = rbind(df.hyp, 
                  data.frame(
                    Parameter = sprintf("spc%d", i),
@@ -986,8 +986,8 @@ df.m |>
 # create a table with the hypothesis tests for each of the PCs
 df.hyp = data.frame()
 for (i in 1:4) {
-  e = hypothesis(m, sprintf("0 > -spc%d", i), alpha = 0.025 )
-  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("0 < -spc%d", i), alpha = 0.025 )
+  e = hypothesis(m, sprintf("spc%d > 0", i), alpha = 0.025 )
+  if (e$hypothesis$Post.Prob < 0.5) e = hypothesis(m, sprintf("spc%d < 0", i), alpha = 0.025 )
   df.hyp = rbind(df.hyp, 
                  data.frame(
                    Parameter = sprintf("spc%d", i),
