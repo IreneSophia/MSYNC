@@ -52,7 +52,7 @@ for (f in files){
       frame = as.numeric(frame),
       dyad  = gsub(sprintf("(.+)_%s.*", task), "\\1", f),
       side  = substr(name, 1, 1), 
-      key   = as.numeric(substr(name, 2, nchar(name)-1)),
+      key   = as.numeric(substr(name, 2, nchar(name)-1)) - 1,
       name  = substr(name, nchar(name), nchar(name))
     ) %>% 
     # focus on the relevant keypoints
